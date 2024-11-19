@@ -1,0 +1,9 @@
+tests:
+  - create-vaults
+  - load-attributes
+  - delete-attributes
+  - delete-vaults
+concurrency:
+  - 16
+  - 32
+  - 64
