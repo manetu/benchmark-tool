@@ -25,13 +25,18 @@
 (defn init-query-attributes [driver]
   (partial driver.api/query-attributes driver))
 
+(defn init-standalone-attributes [driver]
+  (fn [record]
+    (driver.api/standalone-attribute-update driver record)))
+
 (def command-map
   {:create-vaults     init-create-vault
    :delete-vaults     init-delete-vault
    :load-attributes   init-load-attributes
    :onboard           init-onboard
    :delete-attributes init-delete-attributes
-   :query-attributes  init-query-attributes})
+   :query-attributes  init-query-attributes
+   :standalone-attributes   init-standalone-attributes})
 
 (defn get-handler
   [mode driver]

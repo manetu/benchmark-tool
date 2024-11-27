@@ -82,6 +82,13 @@
                   :variables [{:variable/name :$expr
                                :variable/type :String}]
                   :queries [[:sparql_update {:label label :sparql_expr "DELETE WHERE { ?s ?p ?o . }"}]]}))
+(defn -standalone-attribute-update [ctx {:keys [label] :as record}]
+  (gql-query ctx {:operation {:operation/type :mutation
+                              :operation/name "sparql_update"}
+                  :variables [{:variable/name :$expr
+                               :variable/type :String}]
+                  :queries [[:sparql_update {:label label :sparql_expr :$expr}]]}
+             {:expr (sparql/convert-standalone-attribute ctx record)}))
 
 (defn -query-attributes [ctx record]
   (throw (ex-info "not implemented" {})))
@@ -97,7 +104,9 @@
   (delete-attributes [this record]
     (-delete-attributes ctx record))
   (query-attributes [this record]
-    (-query-attributes ctx record)))
+    (-query-attributes ctx record))
+  (standalone-attribute-update [this record]
+    (-standalone-attribute-update ctx record)))
 
 (defn create
   [options]

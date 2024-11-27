@@ -121,9 +121,12 @@
 
 (defn render [options stats]
   (reports/render-stats options stats))
-(defn get-records [{:keys [count namespace] :as options} path]
+(defn get-records
+  [{:keys [mode count vault-count namespace] :as options} path]
   (if count
-    (synthetic/load-synthetic-records count namespace)
+    (if (= mode :standalone-attributes)
+      (synthetic/load-synthetic-records vault-count namespace)
+      (synthetic/load-synthetic-records count namespace))
     (loader/load-records path)))
 
 (defn exec-test
@@ -157,7 +160,95 @@
       (log/error "Exception in exec:" (.getMessage e))
       {:error true :mode mode :message (.getMessage e)})))
 
-(defn exec-configured-tests [{:keys [tests concurrency] :as config} options path]
+(defn validate-standalone-options [{:keys [count vault-count] :as options}]
+  (when-not vault-count
+    (throw (ex-info "vault-count is required for standalone operations" {})))
+  (when (< vault-count 1)
+    (throw (ex-info "vault-count must be greater than 0" {})))
+  (when (< count vault-count)
+    (throw (ex-info "operation count must be greater than or equal to vault-count" {})))
+  options)
+
+(defn create-vault-records
+  "Create a sequence of vault records for initialization"
+  [vault-count namespace]
+  (synthetic/load-synthetic-records vault-count namespace))
+
+(defn create-attribute-operation-records
+  "Creates a channel of attribute operations distributed across vaults"
+  [vault-count total-ops namespace]
+  (let [base-records (->> (range 1 (inc vault-count))
+                          (mapv #(synthetic/create-synthetic-record % namespace)))
+        ch (async/chan)]
+    (go
+      (loop [iteration 1]
+        (when (<= iteration total-ops)
+          (let [vault-idx (mod (dec iteration) vault-count)
+                record (nth base-records vault-idx)]
+            (>!! ch {:data {:Email (get-in record [:data :Email])}
+                     :label (:label record)
+                     :iteration iteration})
+            (recur (inc iteration)))))
+      (async/close! ch))
+    {:n total-ops :ch ch}))
+
+(defn exec-phase
+  "Executes a test phase with proper stats collection"
+  [{:keys [mode concurrency] :as options} records]
+  (let [output-ch (async/chan (* 4 concurrency))]
+    @(-> (driver.core/create options)
+         (p/then
+          (fn [driver]
+            (let [mux (async/mult output-ch)
+                  f (commands/get-handler mode driver)]
+              (p/all [(t/now)
+                      (execute-commands options f output-ch (:ch records))
+                      (show-progress options (:n records) mux)
+                      (compute-stats options (:n records) mux)]))))
+         (p/then
+          (fn [[start _ _ {:keys [successes] :as stats}]]
+            (let [end (t/now)
+                  d (t/duration end start)]
+              (assoc stats
+                     :total-duration (round2 3 d)
+                     :rate (round2 2 (* (/ successes d) 1000))))))
+         (p/then (fn [stats]
+                   (render options stats)
+                   stats)))))
+
+(defn exec-standalone-attributes
+  [{:keys [mode concurrency vault-count count namespace] :as options} path]
+  (try
+    (log/info "Starting standalone attribute test with" vault-count "vaults and" count "operations")
+
+    (let [init-opts (assoc options :mode :create-vaults)
+          vault-records (create-vault-records vault-count namespace)
+          init-stats (exec-phase init-opts vault-records)]
+
+      (if (pos? (:failures init-stats))
+        (do
+          (log/error "Vault initialization failed")
+          {:error true :message "Vault initialization failed"})
+
+        (do
+          (log/info "Vault initialization complete. Starting attribute operations.")
+
+          (let [attr-opts (assoc options :mode :standalone-attributes)
+                attr-records (create-attribute-operation-records vault-count count namespace)
+                attr-stats (exec-phase attr-opts attr-records)]
+
+            (log/info "Attribute operations complete. Starting cleanup.")
+            (let [cleanup-opts (assoc options :mode :delete-vaults)
+                  cleanup-records (create-vault-records vault-count namespace)]
+              (exec-phase cleanup-opts cleanup-records))
+            attr-stats))))
+
+    (catch Exception e
+      (log/error "Exception in standalone attributes:" (ex-message e))
+      {:error true :message (ex-message e)})))
+
+(defn exec-configured-tests
+  [{:keys [tests concurrency] :as config} options path]
   (let [results (for [c concurrency]
                   {:concurrency c
                    :tests (reduce
@@ -165,7 +256,12 @@
                              (let [test-opts (assoc options
                                                     :mode (keyword test-mode)
                                                     :concurrency c)
-                                   result (exec-test test-opts path)]
+                                   test-opts (if (= test-mode "standalone-attributes")
+                                               (validate-standalone-options test-opts)
+                                               test-opts)
+                                   result (if (= test-mode "standalone-attributes")
+                                            (exec-standalone-attributes test-opts path)
+                                            (exec-test test-opts path))]
                                (assoc acc test-mode result)))
                            {}
                            tests)})]

@@ -101,3 +101,38 @@
 (defn convert
   [{:keys [type id class] :as options} {:keys [Email] :as record}]
   (clostache/render update-template {:type type :id id :class class :email Email :attributes (map field-> record)}))
+
+(def standalone-attribute-template
+  "
+   PREFIX perf:   <http://manetu.com/performance/>
+
+   INSERT
+   {
+          _:r perf:counter 0 .
+   }
+   WHERE
+   {
+          FILTER NOT EXISTS { ?s perf:counter ?o . }
+   };
+
+   DELETE
+   {
+          ?s perf:counter ?current .
+   }
+   INSERT
+   {
+          ?s perf:counter ?next .
+   }
+   WHERE
+   {
+          ?s perf:counter ?current .
+          BIND(?current + 1 AS ?next)
+   };
+")
+
+(defn convert-standalone-attribute
+  [{:keys [type id class] :as options} {:keys [label] :as record}]
+  (clostache/render standalone-attribute-template
+                    {:type type
+                     :id id
+                     :class class}))

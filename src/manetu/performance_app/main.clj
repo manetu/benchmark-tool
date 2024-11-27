@@ -60,7 +60,7 @@
    [nil "--verbose-errors" "Any sub-operation failure is logged as ERROR instead of TRACE"
     :default false]
    [nil "--type TYPE" "The type of data source this CLI represents"
-    :default "performance-appd"]
+    :default "performance-app"]
    [nil "--id ID" "The id of the data-source this CLI represents"
     :default "535CC6FC-EAF7-4CF3-BA97-24B2406674A7"]
    [nil "--class CLASS" "The schemaClass of the data-source this CLI represents"
@@ -85,7 +85,10 @@
    [nil "--count NUM" "Number of test iterations"
     :parse-fn #(Integer/parseInt %)
     :validate [pos? "Must be a positive integer"]]
-   [nil "--namespace NS" "Namespace prefix for synthetic vault labels"]])
+   [nil "--namespace NS" "Namespace prefix for synthetic vault labels"]
+   [nil "--vault-count NUM" "Number of vaults for standalone testing"
+    :parse-fn #(Integer/parseInt %)
+    :validate [pos? "Must be a positive integer"]]])
 
 (defn exit [status msg & args]
   (do

@@ -3,6 +3,7 @@ tests:
   - load-attributes
   - delete-attributes
   - delete-vaults
+  - standalone-attributes
 concurrency:
   - 16
   - 32

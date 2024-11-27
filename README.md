@@ -13,6 +13,10 @@ The tool supports testing several functions:
 3. **delete-attributes**: Delete all attributes from the vault
 4. **delete-vaults**: Remove vaults from the system
 5. **onboard**: Simultaneously create vaults and load attributes
+6. **standalone-attributes**: Will execute (--count) number of attribute operations across a specified number of vaults (--vault-count).
+   * --vault-count must be passed through, this does not affect the other tests only standalone-attributes
+   * example command `./target/bin/manetu-performance-app -u http://manetu.instance --token $MANETU_TOKEN --config tests.yaml --count 100 --namespace test1 --vault-count 20 -l debug `
+   * This would create 20 vaults and execute 100 attribute operations across the 20 vaults for the standalone-attributes test. For other tests that are also passed through in the config file, they would use --count.
 
 ## Installation
 
@@ -62,6 +66,7 @@ tests:
   - load-attributes
   - delete-attributes
   - delete-vaults
+  - standalone-attributes
 concurrency:
   - 16
   - 32
@@ -114,7 +119,6 @@ Concurrency,Test,Successes,Failures,Min (ms),Mean (ms),Stddev,P50 (ms),P90 (ms),
 
 ### Options
 ```
-Options:
   -h, --help
   -v, --version                                                Print the version and exit
   -u, --url URL                                                The connection URL
@@ -124,15 +128,16 @@ Options:
   -l, --log-level LEVEL  :info                                 Select the logging verbosity level from: [trace, debug, info, error]
       --fatal-errors     false                                 Any sub-operation failure is considered to be an application level failure
       --verbose-errors   false                                 Any sub-operation failure is logged as ERROR instead of TRACE
-      --type TYPE        data-loader                           The type of data source this CLI represents
+      --type TYPE        performance-app                       The type of data source this CLI represents
       --id ID            535CC6FC-EAF7-4CF3-BA97-24B2406674A7  The id of the data-source this CLI represents
       --class CLASS      global                                The schemaClass of the data-source this CLI represents
       --config CONFIG                                          Path to test configuration YAML file
   -c, --concurrency NUM  16                                    The number of parallel requests to issue
-  -m, --mode MODE        :load-attributes                      Select the mode from: [query-attributes, load-attributes, onboard, delete-vaults, test-suite, delete-attributes, create-vaults]
+  -m, --mode MODE        :load-attributes                      Select the mode from: [query-attributes, load-attributes, onboard, delete-vaults, test-suite, standalone-attributes, delete-attributes, create-vaults]
   -d, --driver DRIVER    :graphql                              Select the driver from: [graphql]
       --csv-file FILE    results.csv                           Write the results to a CSV file
       --json-file FILE   results.json                          Write the results to a JSON file
       --count NUM                                              Number of test iterations
       --namespace NS                                           Namespace prefix for synthetic vault labels
+      --vault-count NUM                                        Number of vaults for standalone testing
 ```
