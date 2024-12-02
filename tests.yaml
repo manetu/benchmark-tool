@@ -24,6 +24,6 @@ concurrency:
   - 32
   - 64
 log_level: debug  # Available levels: trace, debug, info, error
-reports:
-  csv: "reports.csv"  # Path for CSV report output
-  json: "reports.json"  # Path for JSON report output
+#reports: #optional define custom path for test reports. Default is ./reports/manetu-perf-results-<hh-mm-MM-dd-yyyy>.[csv|json]
+#  csv: "reports.csv"  # Path for CSV report output
+#  json: "reports.json"  # Path for JSON report output

@@ -1,6 +1,7 @@
 (ns manetu.performance-app.config
   (:require [yaml.core :as yaml]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [clojure.java.io :as io]))
 
 (def valid-test-suites
   #{:vaults :e2e :attributes})
@@ -60,20 +61,33 @@
                             (str/join ", " (map name valid-log-levels)))
                     {:log-level log-level
                      :valid-levels valid-log-levels}))))
-
+(defn generate-report-filename []
+  (let [timestamp (java.time.LocalDateTime/now)
+        formatter (java.time.format.DateTimeFormatter/ofPattern "HH-mm-MM-dd-yyyy")]
+    (str "manetu-perf-results-" (.format timestamp formatter))))
+(defn ensure-reports-dir []
+  (let [reports-dir (io/file "reports")]
+    (when-not (.exists reports-dir)
+      (.mkdirs reports-dir))
+    reports-dir))
+(defn get-default-report-paths []
+  (let [base-filename (generate-report-filename)
+        reports-dir (ensure-reports-dir)]
+    {:csv (str (io/file reports-dir (str base-filename ".csv")))
+     :json (str (io/file reports-dir (str base-filename ".json")))}))
 (defn validate-reports [{:keys [csv json] :as reports}]
-  (when-not (and (string? csv) (string? json))
-    (throw (ex-info "Reports configuration must specify csv and json file paths as strings"
-                    {:reports reports}))))
-
+  (if (nil? reports)
+    (get-default-report-paths)
+    (let [default-paths (get-default-report-paths)]
+      {:csv (if (string? csv) csv (:csv default-paths))
+       :json (if (string? json) json (:json default-paths))})))
 (defn validate-config [{:keys [tests concurrency log_level reports] :as config}]
   ;; Check top level structure
   (when-not (and (map? config)
                  (map? tests)
                  (sequential? concurrency)
-                 log_level
-                 (map? reports))
-    (throw (ex-info "Config must contain 'tests' map, 'concurrency' sequence, 'log_level', and 'reports' map"
+                 log_level)
+    (throw (ex-info "Config must contain 'tests' map, 'concurrency' sequence, and 'log_level'"
                     {:config config})))
 
   ;; Validate test suites
@@ -93,10 +107,8 @@
   ;; Validate log level
   (validate-log-level log_level)
 
-  ;; Validate reports
-  (validate-reports reports)
-
-  config)
+  ;; Update config with validated reports
+  (assoc config :reports (validate-reports reports)))
 
 (defn load-config
   "Load and validate the test configuration from a YAML file"

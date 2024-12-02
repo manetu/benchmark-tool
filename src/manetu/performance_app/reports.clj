@@ -52,9 +52,14 @@
                 section
                 stats))]
     (cons headers rows)))
+(defn ensure-parent-dirs [file-path]
+  (let [parent (.getParentFile (io/file file-path))]
+    (when-not (.exists parent)
+      (.mkdirs parent))))
 
 (defn write-csv-report [stats csv-file]
   (try
+    (ensure-parent-dirs csv-file)
     (with-open [writer (io/writer csv-file)]
       (csv/write-csv writer (results->csv-data stats)))
     (log/info "CSV results written to" csv-file)
@@ -65,6 +70,7 @@
 
 (defn write-json-report [stats json-file]
   (try
+    (ensure-parent-dirs json-file)
     (spit json-file (json/generate-string stats {:pretty true}))
     (log/info "Results written to" json-file)
     stats
