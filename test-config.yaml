@@ -1,0 +1,33 @@
+tests:
+  vaults:
+    # Tests vault creation and deletion operations
+    enabled: true
+    count: 1000
+    prefix: vault-test
+    clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
+  e2e:
+    # Tests full lifecycle (create vault -> load attributes -> delete attributes -> delete vault)
+    enabled: true
+    count: 1000
+    prefix: e2e-test
+    clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
+  attributes:
+    # Tests standalone attribute operations
+    enabled: true
+    count: 1000
+    vault_count: 100  # Number of vaults to create for attribute operations
+    prefix: attr-test
+    clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
+concurrency:
+  # note: count values for all sections (especially vault_count for attributes)
+  # should be greater than concurrency values for accurate performance measurements
+  # e.g: To fire 64 concurrent attribute operation requests, there needs to be 64
+  # or more vaults (vault_count>64)
+  - 16
+  - 32
+  - 64
+log_level: debug  # Available levels: trace, debug, info, error
+
+#reports:               # optional define custom path for test reports. Default is ./reports/manetu-perf-results-<hh-mm-MM-dd-yyyy>.[csv|json]
+#  csv: "reports.csv"   # Path for CSV report output
+#  json: "reports.json" # Path for JSON report output

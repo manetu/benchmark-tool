@@ -1,4 +1,3 @@
-;; Copyright © Manetu, Inc.  All rights reserved
 (ns manetu.performance-app.reports
   (:require [cheshire.core :as json]
             [clojure.data.csv :as csv]
@@ -22,9 +21,10 @@
          :rate (:rate stats)
          :count (:count stats)}))
 
-(defn format-csv-row [concurrency test-name stats]
+(defn format-csv-row [concurrency suite-name section stats]
   [(str concurrency)
-   test-name
+   suite-name
+   section
    (:successes stats)
    (:failures stats)
    (:min stats)
@@ -40,25 +40,37 @@
    (:count stats)])
 
 (defn results->csv-data [{:keys [timestamp results]}]
-  (let [headers ["Concurrency" "Test" "Successes" "Failures" "Min (ms)" "Mean (ms)"
-                 "Stddev" "P50 (ms)" "P90 (ms)" "P95 (ms)" "P99 (ms)" "Max (ms)"
-                 "Total Duration (ms)" "Rate (ops/sec)" "Count"]
+  (let [headers ["Concurrency" "Test Suite" "Section" "Successes" "Failures" "Min (ms)"
+                 "Mean (ms)" "Stddev" "P50 (ms)" "P90 (ms)" "P95 (ms)" "P99 (ms)"
+                 "Max (ms)" "Total Duration (ms)" "Rate (ops/sec)" "Count"]
         rows (for [result results
-                   [test-name stats] (:tests result)]
-               (format-csv-row (:concurrency result) (name test-name) stats))]
+                   [suite-name suite-results] (:tests result)
+                   [section stats] suite-results]
+               (format-csv-row
+                (:concurrency result)
+                (name suite-name)
+                section
+                stats))]
     (cons headers rows)))
+(defn ensure-parent-dirs [file-path]
+  (let [parent (.getParentFile (io/file file-path))]
+    (when-not (.exists parent)
+      (.mkdirs parent))))
 
 (defn write-csv-report [stats csv-file]
   (try
+    (ensure-parent-dirs csv-file)
     (with-open [writer (io/writer csv-file)]
       (csv/write-csv writer (results->csv-data stats)))
     (log/info "CSV results written to" csv-file)
+    stats
     (catch Exception e
       (log/error "Failed to write CSV results to file:" (.getMessage e))
       {:error true :message (.getMessage e)})))
 
 (defn write-json-report [stats json-file]
   (try
+    (ensure-parent-dirs json-file)
     (spit json-file (json/generate-string stats {:pretty true}))
     (log/info "Results written to" json-file)
     stats
@@ -78,7 +90,11 @@
                     (update result :tests
                             (fn [tests]
                               (reduce-kv (fn [m k v]
-                                           (assoc m k (order-stats v)))
+                                           (assoc m k
+                                                  (reduce-kv (fn [m2 k2 v2]
+                                                               (assoc m2 k2 (order-stats v2)))
+                                                             (sorted-map)
+                                                             v)))
                                          (sorted-map)
                                          tests))))
                   results)})
