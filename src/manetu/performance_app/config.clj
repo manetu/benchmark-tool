@@ -8,22 +8,28 @@
 (def valid-log-levels
   #{:trace :debug :info :warn :error})
 
-(defn validate-test-config [test-name {:keys [enabled count prefix vault_count] :as config}]
+(defn validate-test-config [test-name {:keys [enabled count prefix vault_count clean_up] :as config}]
   (when-not (map? config)
     (throw (ex-info (format "Test suite '%s' configuration must be a map" test-name)
                     {:test-suite test-name :config config})))
 
   ;; Check required fields exist
-  (when-not (every? #(contains? config %) [:enabled :count :prefix])
-    (throw (ex-info (format "Test suite '%s' missing required fields. Must have enabled, count, and prefix" test-name)
-                    {:test-suite test-name
-                     :config config
-                     :required-fields [:enabled :count :prefix]})))
+  (let [required-msg (str "Test suite '%s' missing required fields. "
+                          "Must have enabled, count, prefix, and clean_up")]
+    (when-not (every? #(contains? config %) [:enabled :count :prefix :clean_up])
+      (throw (ex-info (format required-msg test-name)
+                      {:test-suite test-name
+                       :config config
+                       :required-fields [:enabled :count :prefix :clean_up]}))))
 
   ;; Validate value types and ranges
   (when-not (boolean? enabled)
     (throw (ex-info (format "Test suite '%s': enabled must be a boolean" test-name)
                     {:test-suite test-name :enabled enabled})))
+
+  (when-not (boolean? clean_up)
+    (throw (ex-info (format "Test suite '%s': clean_up must be a boolean" test-name)
+                    {:test-suite test-name :clean_up clean_up})))
 
   (when-not (and (integer? count) (pos? count))
     (throw (ex-info (format "Test suite '%s': count must be a positive integer" test-name)

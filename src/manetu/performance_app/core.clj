@@ -143,59 +143,86 @@
          (p/then (fn [stats]
                    (render options stats)
                    stats)))))
+(defn perform-cleanup
+  "Performs cleanup operation for a specific test suite"
+  [{:keys [count prefix] :as test-config} driver-options]
+  (log/info "Starting cleanup operation for prefix:" prefix "with count:" count)
+  (let [cleanup-records (synthetic/load-synthetic-records count prefix)
+        cleanup-opts (assoc driver-options :mode :delete-vaults)
+        cleanup-stats (exec-phase cleanup-opts cleanup-records)]
+
+    (if (pos? (:failures cleanup-stats))
+      (log/warn "Some cleanup operations failed. Check logs for details.")
+      (log/info "Cleanup completed successfully"))
+
+    {"cleanup" cleanup-stats}))
 
 (defn exec-vault-suite
   "Executes the vaults test suite - creates and then deletes vaults"
-  [{:keys [count prefix] :as test-config} driver-options]
-  (log/info "Starting vaults test suite with" count "vaults")
-  (let [create-records (synthetic/load-synthetic-records count prefix)
-        delete-records (synthetic/load-synthetic-records count prefix)
+  [{:keys [count prefix clean_up] :as test-config} driver-options]
+  (if clean_up
+    (do
+      (log/info "Clean up mode enabled for vaults suite - skipping regular test execution")
+      (perform-cleanup test-config driver-options))
+    (do
+      (log/info "Starting vaults test suite with" count "vaults")
+      (let [create-records (synthetic/load-synthetic-records count prefix)
+            delete-records (synthetic/load-synthetic-records count prefix)
 
-        create-stats (-> (assoc driver-options :mode :create-vaults)
-                         (exec-phase create-records))
+            create-stats (-> (assoc driver-options :mode :create-vaults)
+                             (exec-phase create-records))
 
-        _ (log/info "Vault creation complete. Starting deletion.")
+            _ (log/info "Vault creation complete. Starting deletion.")
 
-        delete-stats (-> (assoc driver-options :mode :delete-vaults)
-                         (exec-phase delete-records))]
+            delete-stats (-> (assoc driver-options :mode :delete-vaults)
+                             (exec-phase delete-records))]
 
-    {"create-vaults" create-stats
-     "delete-vaults" delete-stats}))
+        {"create-vaults" create-stats
+         "delete-vaults" delete-stats}))))
 
 (defn exec-e2e-suite
   "Executes the e2e test suite - full lifecycle test"
-  [{:keys [count prefix] :as test-config} driver-options]
-  (log/info "Starting e2e test suite with" count "operations")
-  (let [records (synthetic/load-synthetic-records count prefix)
-        stats (-> (assoc driver-options :mode :e2e)
-                  (exec-phase records))]
-
-    {"full-lifecycle" stats}))
+  [{:keys [count prefix clean_up] :as test-config} driver-options]
+  (if clean_up
+    (do
+      (log/info "Clean up mode enabled for e2e suite - skipping regular test execution")
+      (perform-cleanup test-config driver-options))
+    (do
+      (log/info "Starting e2e test suite with" count "operations")
+      (let [records (synthetic/load-synthetic-records count prefix)
+            stats (-> (assoc driver-options :mode :e2e)
+                      (exec-phase records))]
+        {"full-lifecycle" stats}))))
 
 (defn exec-attributes-suite
   "Executes the attributes test suite - standalone attribute operations"
-  [{:keys [count vault_count prefix] :as test-config} driver-options]
-  (log/info "Starting attributes test suite with" vault_count "vaults and" count "operations")
-  (let [init-opts (assoc driver-options :mode :create-vaults)
-        vault-records (synthetic/load-synthetic-records vault_count prefix)
-        init-stats (exec-phase init-opts vault-records)]
+  [{:keys [count vault_count prefix clean_up] :as test-config} driver-options]
+  (if clean_up
+    (do
+      (log/info "Clean up mode enabled for attributes suite - skipping regular test execution")
+      (perform-cleanup (assoc test-config :count vault_count) driver-options))
+    (do
+      (log/info "Starting attributes test suite with" vault_count "vaults and" count "operations")
+      (let [init-opts (assoc driver-options :mode :create-vaults)
+            vault-records (synthetic/load-synthetic-records vault_count prefix)
+            init-stats (exec-phase init-opts vault-records)]
 
-    (if (pos? (:failures init-stats))
-      (do
-        (log/error "Vault initialization failed")
-        {"standalone-attributes" {:error true :message "Vault initialization failed"}})
+        (if (pos? (:failures init-stats))
+          (do
+            (log/error "Vault initialization failed")
+            {"standalone-attributes" {:error true :message "Vault initialization failed"}})
 
-      (do
-        (log/info "Vault initialization complete. Starting attribute operations.")
-        (let [attr-opts (assoc driver-options :mode :standalone-attributes)
-              attr-records (synthetic/create-attribute-operation-records vault_count count prefix)
-              attr-stats (exec-phase attr-opts attr-records)]
+          (do
+            (log/info "Vault initialization complete. Starting attribute operations.")
+            (let [attr-opts (assoc driver-options :mode :standalone-attributes)
+                  attr-records (synthetic/create-attribute-operation-records vault_count count prefix)
+                  attr-stats (exec-phase attr-opts attr-records)]
 
-          (log/info "Attribute operations complete. Starting cleanup.")
-          (let [cleanup-opts (assoc driver-options :mode :delete-vaults)
-                cleanup-records (synthetic/load-synthetic-records vault_count prefix)]
-            (exec-phase cleanup-opts cleanup-records)
-            {"standalone-attributes" attr-stats}))))))
+              (log/info "Attribute operations complete. Starting cleanup.")
+              (let [cleanup-opts (assoc driver-options :mode :delete-vaults)
+                    cleanup-records (synthetic/load-synthetic-records vault_count prefix)]
+                (exec-phase cleanup-opts cleanup-records)
+                {"standalone-attributes" attr-stats}))))))))
 
 (defn exec-test-suite
   "Executes a single test suite with the given configuration"

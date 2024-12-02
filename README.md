@@ -51,45 +51,55 @@ make
 The tool supports automated benchmarking using a YAML configuration file.
 
 ```shell
-./target/bin/manetu-performance-app -u https://manetu.instance --token $MANETU_TOKEN --config tests.yaml               
+./target/bin/manetu-performance-app -u https://manetu.instance --token $MANETU_TOKEN --config test-config.yaml
 ```
 
-#### Configuration File Format (tests.yaml)
+#### Configuration File Format (test-config.yaml)
 ```yaml
 tests:
   vaults:
     # Tests vault creation and deletion operations
     enabled: true
-    count: 1000
+    count: 100
     prefix: vault-test
+    clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
   e2e:
     # Tests full lifecycle (create vault -> load attributes -> delete attributes -> delete vault)
     enabled: true
-    count: 1000
+    count: 100
     prefix: e2e-test
+    clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
   attributes:
     # Tests standalone attribute operations
     enabled: true
-    count: 200
-    vault_count: 20  # Number of vaults to create for attribute operations
+    count: 1000
+    vault_count: 100  # Number of vaults to create for attribute operations
     prefix: attr-test
+    clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
 concurrency:
-  # note: count values for all sections (especially vault_count for attributes) 
+  # note: count values for all sections (especially vault_count for attributes)
   # should be greater than concurrency values for accurate performance measurements
-  # e.g: To fire 64 concurrent attribute operation requests, there needs to be 64 
+  # e.g: To fire 64 concurrent attribute operation requests, there needs to be 64
   # or more vaults (vault_count>64)
   - 16
   - 32
   - 64
 log_level: debug  # Available levels: trace, debug, info, error
-reports:
-  csv: "reports.csv"  # Path for CSV report output
-  json: "reports.json"  # Path for JSON report output
+
+#reports:               # optional define custom path for test reports. Default is ./reports/manetu-perf-results-<hh-mm-MM-dd-yyyy>.[csv|json]
+#  csv: "reports.csv"   # Path for CSV report output
+#  json: "reports.json" # Path for JSON report output
+
 ```
+
+* Each test has a knob: `clean_up: false`
+  * This knob should almost always be set to false and should only be set to true if a previous test run ended prematurely and wasn't able to clean up the data.
+  * If enabled, no real test will be run. This will attempt to delete any existing vaults from previous tests runs using the same prefix/count.
+  * prefix/count must match the prefix/count used for the prematurely ended test run.
 
 
 #### Results Output
-Results are written to a JSON file (default: results.json) and csv file (default: results.csv) containing:
+Results are written to a JSON file and CSV file (default: `./reports/manetu-perf-results-<hh-mm-MM-dd-yyyy>.[csv|json]`) containing:
 - Timestamp of the test run
 - Results for each concurrency level including:
     - Success/failure counts
