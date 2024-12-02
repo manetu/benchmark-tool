@@ -6,17 +6,25 @@ The Manetu Performance App is a command-line tool used to performance test and g
 
 ## Features
 
-The tool supports testing several functions:
+The tool supports three main test suites:
 
-1. **create-vaults**: Create a vault for each user, based on a hash of the email address
-2. **load-attributes**: Load attributes into the vault, based on the Person schema
-3. **delete-attributes**: Delete all attributes from the vault
-4. **delete-vaults**: Remove vaults from the system
-5. **onboard**: Simultaneously create vaults and load attributes
-6. **standalone-attributes**: Will execute (--count) number of attribute operations across a specified number of vaults (--vault-count).
-   * --vault-count must be passed through, this does not affect the other tests only standalone-attributes
-   * example command `./target/bin/manetu-performance-app -u http://manetu.instance --token $MANETU_TOKEN --config tests.yaml --count 100 --namespace test1 --vault-count 20 -l debug `
-   * This would create 20 vaults and execute 100 attribute operations across the 20 vaults for the standalone-attributes test. For other tests that are also passed through in the config file, they would use --count.
+1. **vaults**: Tests vault creation and deletion operations
+    - Creates specified number of vaults
+    - Deletes the created vaults
+    - Measures performance of both operations
+
+2. **e2e**: End-to-end lifecycle testing
+    - Performs full lifecycle test of vault operations
+    - Creates vault, loads attributes, deletes attributes, and deletes vault
+    - Measures complete operation performance
+
+3. **attributes**: Standalone attribute operations testing
+    - Creates specified number of vaults
+    - Performs attribute operations across the vaults
+    - Cleans up by deleting the vaults
+    - Measures attribute operation performance
+
+See config file section on how to enable and modify the tests
 
 ## Installation
 
@@ -39,39 +47,46 @@ make
 
 ## Usage
 
-### Single Operation Mode
-Run a single operation on your data:
-
-```shell
-./target/bin/manetu-performance-app -u https://manetu.instance --token $MANETU_TOKEN -m create-vaults -c 16 -l debug sample-data/mock-data.json
-```
-
 ### Benchmarking Mode
-The tool supports automated benchmarking using a YAML configuration file and a sample data file.
+The tool supports automated benchmarking using a YAML configuration file.
 
 ```shell
-./target/bin/manetu-performance-app -u https://manetu.instance --token $MANETU_TOKEN --config tests.yaml -l debug sample-data/mock-data.json
-```
-
-You can also run the test without a data file by supplying a `--count`, count will be the number of iterations for the test, e.g, passing through `--count 1000` will create 1000 vaults. Optionally you can supply a prefix as well with `--namespace`, only really needed if planning on running parallel tests in the same cluster.
-
-```shell
-./target/bin/manetu-performance-app -u https://manetu.instance --token $MANETU_TOKEN --config tests.yaml --count 1000 -l debug 
+./target/bin/manetu-performance-app -u https://manetu.instance --token $MANETU_TOKEN --config tests.yaml               
 ```
 
 #### Configuration File Format (tests.yaml)
 ```yaml
 tests:
-  - create-vaults
-  - load-attributes
-  - delete-attributes
-  - delete-vaults
-  - standalone-attributes
+  vaults:
+    # Tests vault creation and deletion operations
+    enabled: true
+    count: 1000
+    prefix: vault-test
+  e2e:
+    # Tests full lifecycle (create vault -> load attributes -> delete attributes -> delete vault)
+    enabled: true
+    count: 1000
+    prefix: e2e-test
+  attributes:
+    # Tests standalone attribute operations
+    enabled: true
+    count: 200
+    vault_count: 20  # Number of vaults to create for attribute operations
+    prefix: attr-test
 concurrency:
+  # note: count values for all sections (especially vault_count for attributes) 
+  # should be greater than concurrency values for accurate performance measurements
+  # e.g: To fire 64 concurrent attribute operation requests, there needs to be 64 
+  # or more vaults (vault_count>64)
   - 16
   - 32
   - 64
+log_level: debug  # Available levels: trace, debug, info, error
+reports:
+  csv: "reports.csv"  # Path for CSV report output
+  json: "reports.json"  # Path for JSON report output
 ```
+
 
 #### Results Output
 Results are written to a JSON file (default: results.json) and csv file (default: results.csv) containing:
@@ -81,63 +96,76 @@ Results are written to a JSON file (default: results.json) and csv file (default
     - Latency statistics (min, mean, stddev, percentiles)
     - Total duration and operation rate
 
-Example output structure:
+Example output structure JSON:
 ```json
 {
-  "timestamp": "2024-11-18T15:33:20.057399Z",
-  "results": [
-    {
-      "concurrency": 16,
-      "tests": {
-        "create-vaults": {
-          "successes": 1,
+  "timestamp": "2024-11-29T16:56:26.840325Z",
+  "results": [{
+    "concurrency": 5,
+    "tests": {
+      "attributes": {
+        "standalone-attributes": {
+          "count": 20.0,
           "failures": 0,
-          "min": 597.462,
-          "mean": 597.462,
-          "stddev": 0.0,
-          "p50": 597.462,
-          "p90": 597.462,
-          "p95": 597.462,
-          "p99": 597.462,
-          "max": 597.462,
-          "total-duration": 614.26,
-          "rate": 1.63,
-          "count": 1.0
+          "max": 264.378,
+          "mean": 253.342,
+          "min": 238.058,
+          "p50": 254.996,
+          "p90": 260.24,
+          "p95": 262.531,
+          "p99": 264.378,
+          "rate": 25.39,
+          "stddev": 7.136,
+          "successes": 20,
+          "total-duration": 787.841
         }
-        // ... other test results
+      },
+      "e2e": {
+        "full-lifecycle": {}
+      },
+      "vaults": {
+        "create-vaults": {},
+        "delete-vaults": {}
       }
     }
-    // ... results for other concurrency levels
-  ]
+  },
+    {
+      "concurrency": 10,
+      "tests": {
+        "attributes": {},
+        "e2e": {},
+        "vaults": {}
+      }
+    }]
 }
 ```
+Example Output Structure CSV:
 ```csv
-Concurrency,Test,Successes,Failures,Min (ms),Mean (ms),Stddev,P50 (ms),P90 (ms),P95 (ms),P99 (ms),Max (ms),Total Duration (ms),Rate (ops/sec),Count
-16,delete-attributes,10,0,339.874,490.867,87.237,485.209,583.287,583.412,583.412,583.412,599.432,16.68,10.0
-16,delete-vaults,10,0,1714.654,1946.802,93.991,1974.262,2024.572,2037.481,2037.481,2037.481,2043.241,4.89,10.0
+Concurrency,Test Suite,Section,Successes,Failures,Min (ms),Mean (ms),Stddev,P50 (ms),P90 (ms),P95 (ms),P99 (ms),Max (ms),Total Duration (ms),Rate (ops/sec),Count
+5,attributes,standalone-attributes,20,0,238.058,253.342,7.136,254.996,260.24,262.531,264.378,264.378,787.841,25.39,20.0
+5,e2e,full-lifecycle,10,0,3202.563,3636.258,270.47,3672.565,3975.141,4039.821,4039.821,4039.821,7118.985,1.4,10.0
+5,vaults,create-vaults,10,0,932.794,1130.447,139.429,1162.655,1299.361,1321.757,1321.757,1321.757,2243.901,4.46,10.0
+5,vaults,delete-vaults,10,0,1589.095,1737.56,97.55,1765.868,1856.632,1895.452,1895.452,1895.452,3490.003,2.87,10.0
+10,attributes,standalone-attributes,20,0,220.332,321.945,58.195,320.715,394.167,398.972,399.072,399.072,712.592,28.07,20.0
+10,e2e,full-lifecycle,10,0,3969.638,4249.237,185.763,4279.673,4451.816,4452.376,4452.376,4452.376,4453.518,2.25,10.0
+10,vaults,create-vaults,10,0,1046.066,1245.897,86.058,1266.006,1339.987,1352.715,1352.715,1352.715,1354.455,7.38,10.0
+10,vaults,delete-vaults,10,0,1969.871,2223.559,123.344,2245.206,2348.903,2370.766,2370.766,2370.766,2372.024,4.22,10.0
 ```
 
 ### Options
 ```
+Options:
   -h, --help
-  -v, --version                                                Print the version and exit
-  -u, --url URL                                                The connection URL
-  -i, --insecure         false                                 Disable TLS checks (dev only)
-      --[no-]progress    true                                  Enable/disable progress output (default: enabled)
-  -t, --token TOKEN                                            A personal access token
-  -l, --log-level LEVEL  :info                                 Select the logging verbosity level from: [trace, debug, info, error]
-      --fatal-errors     false                                 Any sub-operation failure is considered to be an application level failure
-      --verbose-errors   false                                 Any sub-operation failure is logged as ERROR instead of TRACE
-      --type TYPE        performance-app                       The type of data source this CLI represents
-      --id ID            535CC6FC-EAF7-4CF3-BA97-24B2406674A7  The id of the data-source this CLI represents
-      --class CLASS      global                                The schemaClass of the data-source this CLI represents
-      --config CONFIG                                          Path to test configuration YAML file
-  -c, --concurrency NUM  16                                    The number of parallel requests to issue
-  -m, --mode MODE        :load-attributes                      Select the mode from: [query-attributes, load-attributes, onboard, delete-vaults, test-suite, standalone-attributes, delete-attributes, create-vaults]
-  -d, --driver DRIVER    :graphql                              Select the driver from: [graphql]
-      --csv-file FILE    results.csv                           Write the results to a CSV file
-      --json-file FILE   results.json                          Write the results to a JSON file
-      --count NUM                                              Number of test iterations
-      --namespace NS                                           Namespace prefix for synthetic vault labels
-      --vault-count NUM                                        Number of vaults for standalone testing
+  -v, --version                                               Print the version and exit
+  -u, --url URL                                               The connection URL
+  -i, --insecure        false                                 Disable TLS checks (dev only)
+      --[no-]progress   true                                  Enable/disable progress output (default: enabled)
+  -t, --token TOKEN                                           A personal access token
+      --fatal-errors    false                                 Any sub-operation failure is considered to be an application level failure
+      --verbose-errors  false                                 Any sub-operation failure is logged as ERROR instead of TRACE
+      --type TYPE       performance-app                       The type of data source this CLI represents
+      --id ID           535CC6FC-EAF7-4CF3-BA97-24B2406674A7  The id of the data-source this CLI represents
+      --class CLASS     global                                The schemaClass of the data-source this CLI represents
+      --config CONFIG                                         Path to test configuration YAML file
+  -d, --driver DRIVER   :graphql                              Select the driver from: [graphql]
 ```

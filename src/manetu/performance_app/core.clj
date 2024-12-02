@@ -1,5 +1,4 @@
-;; Copyright © Manetu, Inc.  All rights reserved
-
+;; current core.clj
 (ns manetu.performance-app.core
   (:require [medley.core :as m]
             [promesa.core :as p]
@@ -8,7 +7,6 @@
             [progrock.core :as pr]
             [kixi.stats.core :as kixi]
             [manetu.performance-app.commands :as commands]
-            [manetu.performance-app.loader :as loader]
             [manetu.performance-app.time :as t]
             [manetu.performance-app.synthetic :as synthetic]
             [manetu.performance-app.driver.core :as driver.core]
@@ -121,76 +119,6 @@
 
 (defn render [options stats]
   (reports/render-stats options stats))
-(defn get-records
-  [{:keys [mode count vault-count namespace] :as options} path]
-  (if count
-    (if (= mode :standalone-attributes)
-      (synthetic/load-synthetic-records vault-count namespace)
-      (synthetic/load-synthetic-records count namespace))
-    (loader/load-records path)))
-
-(defn exec-test
-  [{:keys [mode concurrency] :as options} path]
-  (try
-    (let [{:keys [n] :as records} (get-records options path)
-          output-ch (async/chan (* 4 concurrency))]
-      (log/debug "processing" n "records with options:" options)
-      @(-> (driver.core/create options)
-           (p/then
-            (fn [driver]
-              (let [mux (async/mult output-ch)
-                    f (commands/get-handler mode driver)]
-                (p/all [(t/now)
-                        (execute-commands options f output-ch (:ch records))
-                        (show-progress options n mux)
-                        (compute-stats options n mux)]))))
-           (p/then
-            (fn [[start _ _ {:keys [successes] :as stats}]]
-              (let [end (t/now)
-                    d (t/duration end start)]
-                (assoc stats :total-duration (round2 3 d) :rate (round2 2 (* (/ successes d) 1000))))))
-           (p/then (fn [stats]
-                     (render options stats)
-                     stats))
-           (p/catch
-            (fn [e]
-              (log/error "Exception detected during" mode ":" (ex-message e))
-              {:error true :mode mode :message (ex-message e)}))))
-    (catch Exception e
-      (log/error "Exception in exec:" (.getMessage e))
-      {:error true :mode mode :message (.getMessage e)})))
-
-(defn validate-standalone-options [{:keys [count vault-count] :as options}]
-  (when-not vault-count
-    (throw (ex-info "vault-count is required for standalone operations" {})))
-  (when (< vault-count 1)
-    (throw (ex-info "vault-count must be greater than 0" {})))
-  (when (< count vault-count)
-    (throw (ex-info "operation count must be greater than or equal to vault-count" {})))
-  options)
-
-(defn create-vault-records
-  "Create a sequence of vault records for initialization"
-  [vault-count namespace]
-  (synthetic/load-synthetic-records vault-count namespace))
-
-(defn create-attribute-operation-records
-  "Creates a channel of attribute operations distributed across vaults"
-  [vault-count total-ops namespace]
-  (let [base-records (->> (range 1 (inc vault-count))
-                          (mapv #(synthetic/create-synthetic-record % namespace)))
-        ch (async/chan)]
-    (go
-      (loop [iteration 1]
-        (when (<= iteration total-ops)
-          (let [vault-idx (mod (dec iteration) vault-count)
-                record (nth base-records vault-idx)]
-            (>!! ch {:data {:Email (get-in record [:data :Email])}
-                     :label (:label record)
-                     :iteration iteration})
-            (recur (inc iteration)))))
-      (async/close! ch))
-    {:n total-ops :ch ch}))
 
 (defn exec-phase
   "Executes a test phase with proper stats collection"
@@ -216,82 +144,96 @@
                    (render options stats)
                    stats)))))
 
-(defn exec-standalone-attributes
-  [{:keys [mode concurrency vault-count count namespace] :as options} path]
-  (try
-    (log/info "Starting standalone attribute test with" vault-count "vaults and" count "operations")
+(defn exec-vault-suite
+  "Executes the vaults test suite - creates and then deletes vaults"
+  [{:keys [count prefix] :as test-config} driver-options]
+  (log/info "Starting vaults test suite with" count "vaults")
+  (let [create-records (synthetic/load-synthetic-records count prefix)
+        delete-records (synthetic/load-synthetic-records count prefix)
 
-    (let [init-opts (assoc options :mode :create-vaults)
-          vault-records (create-vault-records vault-count namespace)
-          init-stats (exec-phase init-opts vault-records)]
+        create-stats (-> (assoc driver-options :mode :create-vaults)
+                         (exec-phase create-records))
 
-      (if (pos? (:failures init-stats))
-        (do
-          (log/error "Vault initialization failed")
-          {:error true :message "Vault initialization failed"})
+        _ (log/info "Vault creation complete. Starting deletion.")
 
-        (do
-          (log/info "Vault initialization complete. Starting attribute operations.")
+        delete-stats (-> (assoc driver-options :mode :delete-vaults)
+                         (exec-phase delete-records))]
 
-          (let [attr-opts (assoc options :mode :standalone-attributes)
-                attr-records (create-attribute-operation-records vault-count count namespace)
-                attr-stats (exec-phase attr-opts attr-records)]
+    {"create-vaults" create-stats
+     "delete-vaults" delete-stats}))
 
-            (log/info "Attribute operations complete. Starting cleanup.")
-            (let [cleanup-opts (assoc options :mode :delete-vaults)
-                  cleanup-records (create-vault-records vault-count namespace)]
-              (exec-phase cleanup-opts cleanup-records))
-            attr-stats))))
+(defn exec-e2e-suite
+  "Executes the e2e test suite - full lifecycle test"
+  [{:keys [count prefix] :as test-config} driver-options]
+  (log/info "Starting e2e test suite with" count "operations")
+  (let [records (synthetic/load-synthetic-records count prefix)
+        stats (-> (assoc driver-options :mode :e2e)
+                  (exec-phase records))]
 
-    (catch Exception e
-      (log/error "Exception in standalone attributes:" (ex-message e))
-      {:error true :message (ex-message e)})))
+    {"full-lifecycle" stats}))
+
+(defn exec-attributes-suite
+  "Executes the attributes test suite - standalone attribute operations"
+  [{:keys [count vault_count prefix] :as test-config} driver-options]
+  (log/info "Starting attributes test suite with" vault_count "vaults and" count "operations")
+  (let [init-opts (assoc driver-options :mode :create-vaults)
+        vault-records (synthetic/load-synthetic-records vault_count prefix)
+        init-stats (exec-phase init-opts vault-records)]
+
+    (if (pos? (:failures init-stats))
+      (do
+        (log/error "Vault initialization failed")
+        {"standalone-attributes" {:error true :message "Vault initialization failed"}})
+
+      (do
+        (log/info "Vault initialization complete. Starting attribute operations.")
+        (let [attr-opts (assoc driver-options :mode :standalone-attributes)
+              attr-records (synthetic/create-attribute-operation-records vault_count count prefix)
+              attr-stats (exec-phase attr-opts attr-records)]
+
+          (log/info "Attribute operations complete. Starting cleanup.")
+          (let [cleanup-opts (assoc driver-options :mode :delete-vaults)
+                cleanup-records (synthetic/load-synthetic-records vault_count prefix)]
+            (exec-phase cleanup-opts cleanup-records)
+            {"standalone-attributes" attr-stats}))))))
+
+(defn exec-test-suite
+  "Executes a single test suite with the given configuration"
+  [suite-name {:keys [enabled] :as suite-config} driver-options]
+  (when enabled
+    (log/info "Executing test suite:" suite-name)
+    (case suite-name
+      :vaults (exec-vault-suite suite-config driver-options)
+      :e2e (exec-e2e-suite suite-config driver-options)
+      :attributes (exec-attributes-suite suite-config driver-options))))
 
 (defn exec-configured-tests
-  [{:keys [tests concurrency] :as config} options path]
+  "Execute all configured test suites"
+  [{:keys [tests concurrency] :as config} options]
   (let [results (for [c concurrency]
                   {:concurrency c
-                   :tests (reduce
-                           (fn [acc test-mode]
-                             (let [test-opts (assoc options
-                                                    :mode (keyword test-mode)
-                                                    :concurrency c)
-                                   test-opts (if (= test-mode "standalone-attributes")
-                                               (validate-standalone-options test-opts)
-                                               test-opts)
-                                   result (if (= test-mode "standalone-attributes")
-                                            (exec-standalone-attributes test-opts path)
-                                            (exec-test test-opts path))]
-                               (assoc acc test-mode result)))
+                   :tests (reduce-kv
+                           (fn [acc suite-name suite-config]
+                             (if-let [suite-results (exec-test-suite
+                                                     suite-name
+                                                     suite-config
+                                                     (assoc options :concurrency c))]
+                               (assoc acc suite-name suite-results)
+                               acc))
                            {}
                            tests)})]
     (reports/aggregate-results results)))
 
-(defn exec
-  [{:keys [mode concurrency] :as options} path]
-  (let [{:keys [n] :as records} (loader/load-records path)
-        output-ch (async/chan (* 4 concurrency))]
-    (log/debug "processing" n "records with options:" options)
-    (-> (driver.core/create options)
-        (p/then
-         (fn [driver]
-           (let [mux (async/mult output-ch)
-                 f (commands/get-handler mode driver)]
-             (p/all [(t/now)
-                     (execute-commands options f output-ch (:ch records))
-                     (show-progress options n mux)
-                     (compute-stats options n mux)]))))
-        (p/then
-         (fn [[start _ _ {:keys [successes] :as stats}]]
-           (let [end (t/now)
-                 d (t/duration end start)]
-             (-> stats
-                 (assoc :total-duration (round2 3 d)
-                        :rate (round2 2 (* (/ successes d) 1000)))
-                 ((fn [stats]
-                    (render options stats)
-                    stats))))))
-        (p/catch
-         (fn [e]
-           (log/error "Exception detected:" (ex-message e))
-           {:error true})))))
+(defn exec-tests
+  "Main entry point for test execution"
+  [options config]
+  (try
+    (log/info "Starting test execution with config:" config)
+    (let [results (exec-configured-tests config options)]
+      (-> results
+          (reports/write-json-report (:json-file options))
+          (reports/write-csv-report (:csv-file options)))
+      results)
+    (catch Exception e
+      (log/error "Test execution failed:" (ex-message e))
+      {:error true :message (ex-message e)})))

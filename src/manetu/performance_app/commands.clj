@@ -28,6 +28,12 @@
 (defn init-standalone-attributes [driver]
   (fn [record]
     (driver.api/standalone-attribute-update driver record)))
+(defn init-e2e [driver]
+  (fn [record]
+    (-> (driver.api/create-vault driver record)
+        (p/then (fn [_] (driver.api/load-attributes driver record)))
+        (p/then (fn [_] (driver.api/delete-attributes driver record)))
+        (p/then (fn [_] (driver.api/delete-vault driver record))))))
 
 (def command-map
   {:create-vaults     init-create-vault
@@ -36,6 +42,7 @@
    :onboard           init-onboard
    :delete-attributes init-delete-attributes
    :query-attributes  init-query-attributes
+   :e2e               init-e2e
    :standalone-attributes   init-standalone-attributes})
 
 (defn get-handler

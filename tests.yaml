@@ -1,10 +1,29 @@
 tests:
-  - create-vaults
-  - load-attributes
-  - delete-attributes
-  - delete-vaults
-  - standalone-attributes
+  vaults:
+    # Tests vault creation and deletion operations
+    enabled: true
+    count: 1000
+    prefix: vault-test
+  e2e:
+    # Tests full lifecycle (create vault -> load attributes -> delete attributes -> delete vault)
+    enabled: true
+    count: 1000
+    prefix: e2e-test
+  attributes:
+    # Tests standalone attribute operations
+    enabled: true
+    count: 200
+    vault_count: 20  # Number of vaults to create for attribute operations
+    prefix: attr-test
 concurrency:
+  # note: count values for all sections (especially vault_count for attributes)
+  # should be greater than concurrency values for accurate performance measurements
+  # e.g: To fire 64 concurrent attribute operation requests, there needs to be 64
+  # or more vaults (vault_count>64)
   - 16
   - 32
   - 64
+log_level: debug  # Available levels: trace, debug, info, error
+reports:
+  csv: "reports.csv"  # Path for CSV report output
+  json: "reports.json"  # Path for JSON report output
