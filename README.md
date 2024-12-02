@@ -31,11 +31,6 @@ See config file section on how to enable and modify the tests
 ### Prerequisites
 - JRE
 
-```shell
-sudo wget https://github.com/manetu/data-loader/releases/download/v2.0.1/manetu-data-loader -O /usr/local/bin/manetu-data-loader
-sudo chmod +x /usr/local/bin/manetu-data-loader
-```
-
 ## Building
 
 ### Prerequisites
