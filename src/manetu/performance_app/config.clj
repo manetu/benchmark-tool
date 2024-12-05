@@ -4,11 +4,17 @@
             [clojure.java.io :as io]))
 
 (def valid-test-suites
-  #{:vaults :e2e :attributes})
+  #{:vaults :e2e :attributes :tokenizer :tokenizer_translate_e2e})
 (def valid-log-levels
   #{:trace :debug :info :warn :error})
 
-(defn validate-test-config [test-name {:keys [enabled count prefix vault_count clean_up] :as config}]
+(def valid-token-types
+  #{:EPHEMERAL :PERSISTENT})
+
+(defn validate-test-config [test-name {:keys [enabled count prefix vault_count clean_up realm token_type
+                                              value_min value_max tokens_per_job]
+                                       :or {realm "data-loader"}
+                                       :as config}]
   (when-not (map? config)
     (throw (ex-info (format "Test suite '%s' configuration must be a map" test-name)
                     {:test-suite test-name :config config})))
@@ -38,6 +44,42 @@
   (when-not (string? prefix)
     (throw (ex-info (format "Test suite '%s': prefix must be a string" test-name)
                     {:test-suite test-name :prefix prefix})))
+
+  ;; Validate tokenizer specific configuration
+  (when (#{:tokenizer :tokenizer_translate_e2e} test-name)
+    (when-not (contains? config :vault_count)
+      (throw (ex-info "Tokenizer test suite requires vault_count parameter"
+                      {:test-suite test-name})))
+
+    (when-not (and (integer? vault_count) (pos? vault_count))
+      (throw (ex-info "Tokenizer test suite: vault_count must be a positive integer"
+                      {:test-suite test-name :vault_count vault_count})))
+
+    (when (< count vault_count)
+      (throw (ex-info "Tokenizer test suite: count must be greater than or equal to vault_count"
+                      {:test-suite test-name :count count :vault_count vault_count})))
+
+    (when-not (or (nil? realm) (string? realm))
+      (throw (ex-info "Tokenizer test suite: realm must be a string if provided"
+                      {:test-suite test-name :realm realm})))
+
+    ;; New validations
+    (when-not (and (integer? value_min) (pos? value_min))
+      (throw (ex-info "Tokenizer test suite: value_min must be a positive integer"
+                      {:test-suite test-name :value_min value_min})))
+
+    (when-not (and (integer? value_max) (>= value_max value_min))
+      (throw (ex-info "Tokenizer test suite: value_max must be >= value_min"
+                      {:test-suite test-name :value_max value_max :value_min value_min})))
+
+    (when-not (and (integer? tokens_per_job) (pos? tokens_per_job))
+      (throw (ex-info "Tokenizer test suite: tokens_per_job must be a positive integer"
+                      {:test-suite test-name :tokens_per_job tokens_per_job})))
+
+    (when-not (contains? valid-token-types (keyword token_type))
+      (throw (ex-info (format "Tokenizer test suite: token_type must be one of %s"
+                              (str/join ", " (map name valid-token-types)))
+                      {:test-suite test-name :token_type token_type}))))
 
   ;; Validate attributes specific configuration
   (when (= test-name :attributes)

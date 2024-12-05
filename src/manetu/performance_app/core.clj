@@ -223,6 +223,85 @@
                     cleanup-records (synthetic/load-synthetic-records vault_count prefix)]
                 (exec-phase cleanup-opts cleanup-records)
                 {"standalone-attributes" attr-stats}))))))))
+(defn exec-tokenizer-suite
+  "Executes the tokenizer test suite - creates vaults, performs tokenize operations, then cleans up"
+  [{:keys [count vault_count prefix clean_up realm
+           value_min value_max tokens_per_job token_type] :as test-config}
+   driver-options]
+  (if clean_up
+    (do
+      (log/info "Clean up mode enabled for tokenizer suite - skipping regular test execution")
+      (perform-cleanup (assoc test-config :count vault_count) driver-options))
+    (do
+      (log/info "Starting tokenizer test suite with" vault_count "vaults and" count "operations")
+      (let [init-opts (assoc driver-options :mode :create-vaults)
+            vault-records (synthetic/load-synthetic-records vault_count prefix)
+            init-stats (exec-phase init-opts vault-records)]
+
+        (if (pos? (:failures init-stats))
+          (do
+            (log/error "Vault initialization failed")
+            {"standalone-tokenize" {:error true :message "Vault initialization failed"}})
+
+          (do
+            (log/info "Vault initialization complete. Starting tokenize operations.")
+            (let [tokenize-opts (assoc driver-options :mode :tokenize-values)
+                  tokenize-records (synthetic/create-tokenize-operation-records
+                                    vault_count
+                                    count
+                                    {:prefix prefix
+                                     :realm realm
+                                     :value_min value_min
+                                     :value_max value_max
+                                     :tokens_per_job tokens_per_job
+                                     :token_type token_type})
+                  tokenize-stats (exec-phase tokenize-opts tokenize-records)]
+
+              (log/info "Tokenize operations complete. Starting cleanup.")
+              (let [cleanup-opts (assoc driver-options :mode :delete-vaults)
+                    cleanup-records (synthetic/load-synthetic-records vault_count prefix)]
+                (exec-phase cleanup-opts cleanup-records)
+                {"standalone-tokenize" tokenize-stats}))))))))
+(defn exec-tokenizer-translate-e2e-suite
+  "Executes the tokenizer+translate e2e test suite -
+    creates vaults, performs tokenize+translate operations, then cleans up"
+  [{:keys [count vault_count prefix clean_up realm
+           value_min value_max tokens_per_job token_type] :as test-config}
+   driver-options]
+  (if clean_up
+    (do
+      (log/info "Clean up mode enabled for tokenizer+translate e2e suite - skipping regular test execution")
+      (perform-cleanup (assoc test-config :count vault_count) driver-options))
+    (do
+      (log/info "Starting tokenizer+translate e2e test suite with" vault_count "vaults and" count "operations")
+      (let [init-opts (assoc driver-options :mode :create-vaults)
+            vault-records (synthetic/load-synthetic-records vault_count prefix)
+            init-stats (exec-phase init-opts vault-records)]
+
+        (if (pos? (:failures init-stats))
+          (do
+            (log/error "Vault initialization failed")
+            {"tokenize-translate-e2e" {:error true :message "Vault initialization failed"}})
+
+          (do
+            (log/info "Vault initialization complete. Starting tokenize+translate operations.")
+            (let [e2e-opts (assoc driver-options :mode :tokenize-translate-e2e)
+                  e2e-records (synthetic/create-tokenize-operation-records
+                               vault_count
+                               count
+                               {:prefix prefix
+                                :realm realm
+                                :value_min value_min
+                                :value_max value_max
+                                :tokens_per_job tokens_per_job
+                                :token_type token_type})
+                  e2e-stats (exec-phase e2e-opts e2e-records)]
+
+              (log/info "Tokenize+translate operations complete. Starting cleanup.")
+              (let [cleanup-opts (assoc driver-options :mode :delete-vaults)
+                    cleanup-records (synthetic/load-synthetic-records vault_count prefix)]
+                (exec-phase cleanup-opts cleanup-records)
+                {"tokenize-translate-e2e" e2e-stats}))))))))
 
 (defn exec-test-suite
   "Executes a single test suite with the given configuration"
@@ -232,7 +311,9 @@
     (case suite-name
       :vaults (exec-vault-suite suite-config driver-options)
       :e2e (exec-e2e-suite suite-config driver-options)
-      :attributes (exec-attributes-suite suite-config driver-options))))
+      :attributes (exec-attributes-suite suite-config driver-options)
+      :tokenizer (exec-tokenizer-suite suite-config driver-options)
+      :tokenizer_translate_e2e (exec-tokenizer-translate-e2e-suite suite-config driver-options))))
 
 (defn exec-configured-tests
   "Execute all configured test suites"

@@ -23,6 +23,21 @@ The tool supports three main test suites:
     - Performs attribute operations across the vaults
     - Cleans up by deleting the vaults
     - Measures attribute operation performance
+4. **Tokenizer**: Standalone tokenize operations testing
+    - Creates specified number of vaults
+    - Performs tokenize operations across the vaults using vault MRNs 
+    - Supports both ephemeral and persistent tokens
+    - Supports generating multiple tokens per request
+    - Measures tokenize operation performance 
+    - Cleans up by deleting the vaults
+5. **Tokenizer + Translate E2E**: Standalone tokenize/translate e2e operations testing
+    - Creates specified number of vaults
+    - Performs tokenize and translate operations across the vaults using vault MRNs
+    - Supports both ephemeral and persistent tokens
+    - Supports generating multiple tokens per request
+    - Measures tokenize + translate e2e operation performance
+    - Cleans up by deleting the vaults
+
 
 See config file section on how to enable and modify the tests
 
@@ -55,13 +70,13 @@ tests:
   vaults:
     # Tests vault creation and deletion operations
     enabled: true
-    count: 100
+    count: 1000
     prefix: vault-test
     clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
   e2e:
     # Tests full lifecycle (create vault -> load attributes -> delete attributes -> delete vault)
     enabled: true
-    count: 100
+    count: 1000
     prefix: e2e-test
     clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
   attributes:
@@ -71,6 +86,30 @@ tests:
     vault_count: 100  # Number of vaults to create for attribute operations
     prefix: attr-test
     clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
+  tokenizer:
+    # Tests tokenize only
+    enabled: true
+    count: 100
+    vault_count: 1 # Number of vaults to create for tokenize operations
+    prefix: tokenizer-test
+    realm: data-loader # IMPORTANT: This needs to match the realm you are running your tests
+    clean_up: false
+    value_min: 4 # The minimum size of values to generate
+    value_max: 32 # The maximum size of values to generate
+    tokens_per_job: 3 # The number of tokens per operation to generate
+    token_type: EPHEMERAL # Can be EPHEMERAL or PERSISTENT
+  tokenizer_translate_e2e:
+    # Tests tokenize + translate e2e time
+    enabled: true
+    count: 100
+    vault_count: 1 # Number of vaults to create for tokenize/translate operations
+    prefix: tokenizer-e2e-test
+    realm: data-loader # IMPORTANT: This needs to match the realm you are running your tests
+    clean_up: false
+    value_min: 4 # The minimum size of values to generate
+    value_max: 32 # The maximum size of values to generate
+    tokens_per_job: 1 # The number of tokens per operation to generate
+    token_type: EPHEMERAL # Can be EPHEMERAL or PERSISTENT
 concurrency:
   # note: count values for all sections (especially vault_count for attributes)
   # should be greater than concurrency values for accurate performance measurements

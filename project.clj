@@ -29,6 +29,7 @@
                  [de.ubercode.clostache/clostache "1.4.0"]
                  [buddy/buddy-sign "3.6.1-359"]
                  [medley "1.4.0"]
+                 [crypto-random "1.2.1"]
                  [slingshot "0.12.2"]
                  [district0x/graphql-query "1.0.6"]
                  [http-kit/http-kit "2.7.0"]
