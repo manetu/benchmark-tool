@@ -8,4 +8,6 @@
   (load-attributes [this record])
   (delete-attributes [this record])
   (query-attributes [this record])
-  (standalone-attribute-update [this record]))
+  (standalone-attribute-update [this record])
+  (tokenize-values [this record values])
+  (translate-tokens [this record tokens]))
