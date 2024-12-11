@@ -1,7 +1,5 @@
 # Manetu Benchmark Tool
 
-[![CircleCI](https://circleci.com/gh/manetu/data-loader/tree/master.svg?style=svg)](https://circleci.com/gh/manetu/data-loader/tree/master)
-
 The Manetu Benchmark Tool is a command-line tool used to performance test and generate benchmarks for the Manetu Platform. This tool emulates the essential functions of a Manetu data connector intended to facilitate testing and benchmarking.
 
 ## Features
