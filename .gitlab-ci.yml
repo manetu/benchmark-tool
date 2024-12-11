@@ -1,7 +1,7 @@
 include:
   - project: manetu/tools/ci-tools
     ref: v3.0.0
-    file: /templates/microservice.yml
+    file: /templates/docker.yml
 
 .citools_variables:
   variables:
