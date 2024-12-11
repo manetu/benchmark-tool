@@ -1,3 +1,4 @@
+;; Copyright © Manetu, Inc.  All rights reserved
 (ns manetu.performance-app.config
   (:require [yaml.core :as yaml]
             [clojure.string :as str]
@@ -10,6 +11,39 @@
 
 (def valid-token-types
   #{:EPHEMERAL :PERSISTENT})
+
+(defn validate-count-array [test-name count-array]
+  (when-not (or (integer? count-array) (and (sequential? count-array) (every? integer? count-array)))
+    (throw (ex-info (format "Test suite '%s': count must be an integer or array of integers" test-name)
+                    {:test-suite test-name :count count-array})))
+
+  (when (sequential? count-array)
+    (when-not (every? pos? count-array)
+      (throw (ex-info (format "Test suite '%s': all count values must be positive integers" test-name)
+                      {:test-suite test-name :count count-array})))))
+
+(defn validate-token-type-array [test-name token-types]
+  (when-not (or (string? token-types) (and (sequential? token-types) (every? string? token-types)))
+    (throw (ex-info (format "Test suite '%s': token_type must be a string or array of strings" test-name)
+                    {:test-suite test-name :token_type token-types})))
+
+  (let [types (if (sequential? token-types) token-types [token-types])]
+    (doseq [type types]
+      (when-not (contains? valid-token-types (keyword type))
+        (throw (ex-info (format "Test suite '%s': token_type must be one of %s"
+                                test-name
+                                (str/join ", " (map name valid-token-types)))
+                        {:test-suite test-name :token_type type}))))))
+
+(defn validate-tokens-per-job-array [test-name tokens-per-job]
+  (when-not (or (integer? tokens-per-job) (and (sequential? tokens-per-job) (every? integer? tokens-per-job)))
+    (throw (ex-info (format "Test suite '%s': tokens_per_job must be an integer or array of integers" test-name)
+                    {:test-suite test-name :tokens_per_job tokens-per-job})))
+
+  (when (sequential? tokens-per-job)
+    (when-not (every? pos? tokens-per-job)
+      (throw (ex-info (format "Test suite '%s': all tokens_per_job values must be positive integers" test-name)
+                      {:test-suite test-name :tokens_per_job tokens-per-job})))))
 
 (defn validate-test-config [test-name {:keys [enabled count prefix vault_count clean_up realm token_type
                                               value_min value_max tokens_per_job]
@@ -37,9 +71,7 @@
     (throw (ex-info (format "Test suite '%s': clean_up must be a boolean" test-name)
                     {:test-suite test-name :clean_up clean_up})))
 
-  (when-not (and (integer? count) (pos? count))
-    (throw (ex-info (format "Test suite '%s': count must be a positive integer" test-name)
-                    {:test-suite test-name :count count})))
+  (validate-count-array test-name count)
 
   (when-not (string? prefix)
     (throw (ex-info (format "Test suite '%s': prefix must be a string" test-name)
@@ -55,15 +87,15 @@
       (throw (ex-info "Tokenizer test suite: vault_count must be a positive integer"
                       {:test-suite test-name :vault_count vault_count})))
 
-    (when (< count vault_count)
-      (throw (ex-info "Tokenizer test suite: count must be greater than or equal to vault_count"
-                      {:test-suite test-name :count count :vault_count vault_count})))
+    (let [max-count (if (sequential? count) (apply max count) count)]
+      (when (< max-count vault_count)
+        (throw (ex-info "Tokenizer test suite: count must be greater than or equal to vault_count"
+                        {:test-suite test-name :count count :vault_count vault_count}))))
 
     (when-not (or (nil? realm) (string? realm))
       (throw (ex-info "Tokenizer test suite: realm must be a string if provided"
                       {:test-suite test-name :realm realm})))
 
-    ;; New validations
     (when-not (and (integer? value_min) (pos? value_min))
       (throw (ex-info "Tokenizer test suite: value_min must be a positive integer"
                       {:test-suite test-name :value_min value_min})))
@@ -72,14 +104,8 @@
       (throw (ex-info "Tokenizer test suite: value_max must be >= value_min"
                       {:test-suite test-name :value_max value_max :value_min value_min})))
 
-    (when-not (and (integer? tokens_per_job) (pos? tokens_per_job))
-      (throw (ex-info "Tokenizer test suite: tokens_per_job must be a positive integer"
-                      {:test-suite test-name :tokens_per_job tokens_per_job})))
-
-    (when-not (contains? valid-token-types (keyword token_type))
-      (throw (ex-info (format "Tokenizer test suite: token_type must be one of %s"
-                              (str/join ", " (map name valid-token-types)))
-                      {:test-suite test-name :token_type token_type}))))
+    (validate-tokens-per-job-array test-name tokens_per_job)
+    (validate-token-type-array test-name token_type))
 
   ;; Validate attributes specific configuration
   (when (= test-name :attributes)
@@ -91,9 +117,10 @@
       (throw (ex-info "Attributes test suite: vault_count must be a positive integer"
                       {:test-suite test-name :vault_count vault_count})))
 
-    (when (< count vault_count)
-      (throw (ex-info "Attributes test suite: count must be greater than or equal to vault_count"
-                      {:test-suite test-name :count count :vault_count vault_count})))))
+    (let [max-count (if (sequential? count) (apply max count) count)]
+      (when (< max-count vault_count)
+        (throw (ex-info "Attributes test suite: count must be greater than or equal to vault_count"
+                        {:test-suite test-name :count count :vault_count vault_count}))))))
 
 (defn validate-concurrency [concurrency]
   (when-not (and (sequential? concurrency)
