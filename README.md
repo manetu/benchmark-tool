@@ -1,12 +1,12 @@
-# Manetu Performance App
+# Manetu Benchmark Tool
 
 [![CircleCI](https://circleci.com/gh/manetu/data-loader/tree/master.svg?style=svg)](https://circleci.com/gh/manetu/data-loader/tree/master)
 
-The Manetu Performance App is a command-line tool used to performance test and generate benchmarks for the Manetu Platform. This tool emulates the essential functions of a Manetu data connector intended to facilitate testing and benchmarking.
+The Manetu Benchmark Tool is a command-line tool used to performance test and generate benchmarks for the Manetu Platform. This tool emulates the essential functions of a Manetu data connector intended to facilitate testing and benchmarking.
 
 ## Features
 
-The tool supports three main test suites:
+The tool supports five main test suites:
 
 1. **vaults**: Tests vault creation and deletion operations
     - Creates specified number of vaults
@@ -70,46 +70,64 @@ tests:
   vaults:
     # Tests vault creation and deletion operations
     enabled: true
-    count: 1000
+    count:
+      - 50  # Supports supplying multiple values for count
+      - 100 # Test will run multiple times for each value of count supplied
     prefix: vault-test
     clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
   e2e:
     # Tests full lifecycle (create vault -> load attributes -> delete attributes -> delete vault)
     enabled: true
-    count: 1000
+    count:
+      - 50  # Supports supplying multiple values for count
+      - 100 # Test will run multiple times for each value of count supplied
     prefix: e2e-test
     clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
   attributes:
     # Tests standalone attribute operations
     enabled: true
-    count: 1000
-    vault_count: 100  # Number of vaults to create for attribute operations
+    count:
+      - 50  # Supports supplying multiple values for count
+      - 100 # Test will run multiple times for each value of count supplied
+    vault_count: 10  # Number of vaults to create for attribute operations
     prefix: attr-test
     clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
   tokenizer:
     # Tests tokenize only
     enabled: true
-    count: 100
-    vault_count: 1 # Number of vaults to create for tokenize operations
+    count:
+      - 50   # Supports supplying multiple values for count
+      - 100 # Test will run multiple times for each value of count supplied
+    vault_count: 10
     prefix: tokenizer-test
     realm: data-loader # IMPORTANT: This needs to match the realm you are running your tests
     clean_up: false
-    value_min: 4 # The minimum size of values to generate
-    value_max: 32 # The maximum size of values to generate
-    tokens_per_job: 3 # The number of tokens per operation to generate
-    token_type: EPHEMERAL # Can be EPHEMERAL or PERSISTENT
+    value_min: 4
+    value_max: 32
+    tokens_per_job:
+      - 1 # Supports supplying multiple values for tokens_per_job
+      - 2 # Test will run multiple times for each value of tokens_per_job supplied
+    token_type:
+      - EPHEMERAL  # Supports supplying both, this will run the test twice, once for each token type
+      - PERSISTENT # Can be EPHEMERAL or PERSISTENT
   tokenizer_translate_e2e:
     # Tests tokenize + translate e2e time
     enabled: true
-    count: 100
-    vault_count: 1 # Number of vaults to create for tokenize/translate operations
+    count:
+      - 50   # Supports supplying multiple values for count
+      - 100 # Test will run multiple times for each value of count supplied
+    vault_count: 10
     prefix: tokenizer-e2e-test
     realm: data-loader # IMPORTANT: This needs to match the realm you are running your tests
     clean_up: false
-    value_min: 4 # The minimum size of values to generate
-    value_max: 32 # The maximum size of values to generate
-    tokens_per_job: 1 # The number of tokens per operation to generate
-    token_type: EPHEMERAL # Can be EPHEMERAL or PERSISTENT
+    value_min: 4
+    value_max: 32
+    tokens_per_job:
+      - 1  # Supports supplying multiple values for tokens_per_job
+      - 2  # Test will run multiple times for each value of tokens_per_job supplied
+    token_type:
+      - EPHEMERAL  # Supports supplying both, this will run the test twice, once for each token type
+      - PERSISTENT # Can be EPHEMERAL or PERSISTENT
 concurrency:
   # note: count values for all sections (especially vault_count for attributes)
   # should be greater than concurrency values for accurate performance measurements

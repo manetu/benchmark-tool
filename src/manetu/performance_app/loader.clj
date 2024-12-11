@@ -1,5 +1,4 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
-
 (ns manetu.performance-app.loader
   (:require [buddy.core.hash :as hash]
             [buddy.core.codecs.base64 :as b64]

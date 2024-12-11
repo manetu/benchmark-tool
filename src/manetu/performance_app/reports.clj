@@ -1,3 +1,4 @@
+;; Copyright © Manetu, Inc.  All rights reserved
 (ns manetu.performance-app.reports
   (:require [cheshire.core :as json]
             [clojure.data.csv :as csv]
@@ -21,37 +22,46 @@
          :rate (:rate stats)
          :count (:count stats)}))
 
-(defn format-csv-row [concurrency suite-name section stats]
-  [(str concurrency)
-   suite-name
-   section
-   (:successes stats)
-   (:failures stats)
-   (:min stats)
-   (:mean stats)
-   (:stddev stats)
-   (:p50 stats)
-   (:p90 stats)
-   (:p95 stats)
-   (:p99 stats)
-   (:max stats)
-   (:total-duration stats)
-   (:rate stats)
-   (:count stats)])
+(defn format-csv-row [concurrency suite-name config section stats]
+  (let [token-type (when (#{:tokenizer :tokenizer_translate_e2e} (:test-name config))
+                     (:token_type config))
+        tokens-per-job (when (#{:tokenizer :tokenizer_translate_e2e} (:test-name config))
+                         (:tokens_per_job config))]
+    [(str concurrency)
+     suite-name
+     section
+     (:successes stats)
+     (:failures stats)
+     (:min stats)
+     (:mean stats)
+     (:stddev stats)
+     (:p50 stats)
+     (:p90 stats)
+     (:p95 stats)
+     (:p99 stats)
+     (:max stats)
+     (:total-duration stats)
+     (:rate stats)
+     (:count stats)
+     (or token-type "N/A")
+     (or tokens-per-job "N/A")]))
 
 (defn results->csv-data [{:keys [timestamp results]}]
-  (let [headers ["Concurrency" "Test Suite" "Section" "Successes" "Failures" "Min (ms)"
-                 "Mean (ms)" "Stddev" "P50 (ms)" "P90 (ms)" "P95 (ms)" "P99 (ms)"
-                 "Max (ms)" "Total Duration (ms)" "Rate (ops/sec)" "Count"]
+  (let [headers ["Concurrency" "Test Suite" "Section" "Successes" "Failures" "Min (ms)" "Mean (ms)" "Stddev"
+                 "P50 (ms)" "P90 (ms)" "P95 (ms)" "P99 (ms)" "Max (ms)" "Total Duration (ms)"
+                 "Rate (ops/sec)" "Count" "Token Type" "Tokens Per Job"]
         rows (for [result results
                    [suite-name suite-results] (:tests result)
-                   [section stats] suite-results]
+                   test-result suite-results
+                   [section stats] (:results test-result)]
                (format-csv-row
                 (:concurrency result)
                 (name suite-name)
+                (:config test-result)
                 section
                 stats))]
     (cons headers rows)))
+
 (defn ensure-parent-dirs [file-path]
   (let [parent (.getParentFile (io/file file-path))]
     (when-not (.exists parent)
@@ -91,10 +101,14 @@
                             (fn [tests]
                               (reduce-kv (fn [m k v]
                                            (assoc m k
-                                                  (reduce-kv (fn [m2 k2 v2]
-                                                               (assoc m2 k2 (order-stats v2)))
-                                                             (sorted-map)
-                                                             v)))
+                                                  (mapv (fn [test-result]
+                                                          (update test-result :results
+                                                                  (fn [r]
+                                                                    (reduce-kv (fn [m2 k2 v2]
+                                                                                 (assoc m2 k2 (order-stats v2)))
+                                                                               (sorted-map)
+                                                                               r))))
+                                                        v)))
                                          (sorted-map)
                                          tests))))
                   results)})
