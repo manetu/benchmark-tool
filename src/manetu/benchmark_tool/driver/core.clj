@@ -1,8 +1,8 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
 
-(ns manetu.performance-app.driver.core
+(ns manetu.benchmark-tool.driver.core
   (:require
-   [manetu.performance-app.driver.drivers.graphql.core :as graphql]))
+   [manetu.benchmark-tool.driver.drivers.graphql.core :as graphql]))
 
 (def driver-map
   {:graphql graphql/create})

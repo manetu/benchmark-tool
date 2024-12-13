@@ -1,5 +1,5 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
-(ns manetu.performance-app.reports
+(ns manetu.benchmark-tool.reports
   (:require [cheshire.core :as json]
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
@@ -20,7 +20,10 @@
          :max (:max stats)
          :total-duration (:total-duration stats)
          :rate (:rate stats)
-         :count (:count stats)}))
+         :count (:count stats)
+         :unauthorized (or (:unauthorized stats) 0)
+         :timeout (or (:timeout stats) 0)
+         :not_found (or (:not_found stats) 0)}))
 
 (defn format-csv-row [concurrency suite-name config section stats]
   (let [token-type (when (#{:tokenizer :tokenizer_translate_e2e} (:test-name config))
@@ -44,12 +47,16 @@
      (:rate stats)
      (:count stats)
      (or token-type "N/A")
-     (or tokens-per-job "N/A")]))
+     (or tokens-per-job "N/A")
+     (or (:unauthorized stats) 0)
+     (or (:timeout stats) 0)
+     (or (:not_found stats) 0)]))
 
 (defn results->csv-data [{:keys [timestamp results]}]
   (let [headers ["Concurrency" "Test Suite" "Section" "Successes" "Failures" "Min (ms)" "Mean (ms)" "Stddev"
                  "P50 (ms)" "P90 (ms)" "P95 (ms)" "P99 (ms)" "Max (ms)" "Total Duration (ms)"
-                 "Rate (ops/sec)" "Count" "Token Type" "Tokens Per Job"]
+                 "Rate (ops/sec)" "Count" "Token Type" "Tokens Per Job"
+                 "Unauthorized" "Timeout" "Not Found"]
         rows (for [result results
                    [suite-name suite-results] (:tests result)
                    test-result suite-results
@@ -88,8 +95,10 @@
       (log/error "Failed to write results to file:" (.getMessage e))
       {:error true :message (.getMessage e)})))
 
-(defn render-stats [{:keys [fatal-errors] :as options} {:keys [failures] :as stats}]
-  (println (table [:successes :failures :min :mean :stddev :p50 :p90 :p95 :p99 :max :total-duration :rate] [stats]))
+(defn render-stats [{:keys [fatal-errors] :as options}
+                    {:keys [failures successes unauthorized timeout not_found] :as stats}]
+  (println (table [:successes :failures :min :mean :stddev :p50 :p90 :p95 :p99 :max :total-duration :rate
+                   :unauthorized :timeout :not_found] [stats]))
   (if (and fatal-errors (pos? failures))
     -1
     0))

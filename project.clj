@@ -1,6 +1,6 @@
 (defproject manetu/performance-app "1.0.0-SNAPSHOT"
   :description "A utility to performance test and generate benchmarks for Manetu Platform"
-  :url "https://github.com/IvanP-engr/manetu-performance-app"
+  :url "https://github.com/manetu/benchmark-tool"
   :plugins [[lein-cljfmt "0.9.0"]
             [lein-kibit "0.1.8"]
             [lein-bikeshed "0.5.2"]
@@ -34,12 +34,12 @@
                  [district0x/graphql-query "1.0.6"]
                  [http-kit/http-kit "2.7.0"]
                  [environ "1.2.0"]]
-  :main ^:skip-aot manetu.performance-app.main
+  :main ^:skip-aot manetu.benchmark-tool.main
   :target-path "target/%s"
   :uberjar-name "app.jar"
   :jvm-opts ["-server"]
 
-  :bin {:name "manetu-performance-app"
+  :bin {:name "manetu-benchmark-tool"
         :bin-path "target/bin"}
 
   :eastwood {:add-linters [:unused-namespaces]

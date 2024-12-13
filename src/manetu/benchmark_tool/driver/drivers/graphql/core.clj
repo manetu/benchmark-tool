@@ -1,14 +1,14 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
 
-(ns manetu.performance-app.driver.drivers.graphql.core
+(ns manetu.benchmark-tool.driver.drivers.graphql.core
   (:require [clojure.string :as string]
             [promesa.core :as p]
             [taoensso.timbre :as log]
             [cheshire.core :as json]
             [org.httpkit.client :as http]
             [graphql-query.core :refer [graphql-query]]
-            [manetu.performance-app.sparql :as sparql]
-            [manetu.performance-app.driver.api :as api]
+            [manetu.benchmark-tool.sparql :as sparql]
+            [manetu.benchmark-tool.driver.api :as api]
             [buddy.core.codecs :refer [bytes->str bytes->b64]]))
 
 (defn http-post

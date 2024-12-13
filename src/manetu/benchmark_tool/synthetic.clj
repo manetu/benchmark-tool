@@ -1,5 +1,5 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
-(ns manetu.performance-app.synthetic
+(ns manetu.benchmark-tool.synthetic
   (:require [clojure.core.async :as async :refer [>!! go]]))
 (defn create-synthetic-record [n prefix]
   (let [label (if prefix

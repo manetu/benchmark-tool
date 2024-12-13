@@ -1,6 +1,6 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
 
-(ns manetu.performance-app.driver.api)
+(ns manetu.benchmark-tool.driver.api)
 
 (defprotocol Driver
   (create-vault [this record])

@@ -1,6 +1,6 @@
 # Copyright © Manetu, Inc.  All rights reserved
 
-NAME=manetu-performance-app
+NAME=manetu-benchmark-tool
 BINDIR ?= /usr/local/bin
 OUTPUT=target/$(NAME)
 SHELL=/bin/bash -o pipefail
@@ -11,7 +11,7 @@ export IMAGE_REPOSITORY :=  registry.gitlab.com/manetu/users/$(USER)/$(PROJECT_N
 SRCS += $(shell find src -type f)
 
 COVERAGE_THRESHOLD = 98
-COVERAGE_EXCLUSION += "manetu.performance-app.main"
+COVERAGE_EXCLUSION += "manetu.benchmark-tool.main"
 
 all: scan bin
 

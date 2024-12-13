@@ -2,7 +2,7 @@
 
 (ns user
   (:require [clojure.tools.namespace.repl :refer [refresh]]
-            [manetu.performance-app.main :as main]))
+            [manetu.benchmark-tool.main :as main]))
 
 (defn run
   [params]

@@ -59,7 +59,7 @@ make
 The tool supports automated benchmarking using a YAML configuration file.
 
 ```shell
-./target/bin/manetu-performance-app -u https://manetu.instance --token $MANETU_TOKEN --config test-config.yaml
+./target/bin/manetu-benchmark-tool -u https://manetu.instance --token $MANETU_TOKEN --config test-config.yaml
 ```
 
 #### Configuration File Format (test-config.yaml)

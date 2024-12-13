@@ -1,11 +1,11 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
 
-(ns manetu.performance-app.main
+(ns manetu.benchmark-tool.main
   (:require [clojure.string :as string]
             [clojure.tools.cli :refer [parse-opts]]
-            [manetu.performance-app.core :as core]
-            [manetu.performance-app.driver.core :as driver.core]
-            [manetu.performance-app.config :as config]
+            [manetu.benchmark-tool.core :as core]
+            [manetu.benchmark-tool.driver.core :as driver.core]
+            [manetu.benchmark-tool.config :as config]
             [taoensso.timbre :as log])
   (:gen-class))
 
@@ -22,23 +22,11 @@
             (binding [*out* *err*]
               (println (force timestamp_) (string/upper-case (name level)) (force msg_))))}}}))
 
-;(def log-levels #{:trace :debug :info :error})
-;(defn print-loglevels []
-;  (str "[" (string/join ", " (map name log-levels)) "]"))
-;(def loglevel-description
-;  (str "Select the logging verbosity level from: " (print-loglevels)))
-
 (def drivers (into #{} (keys driver.core/driver-map)))
 (defn print-drivers []
   (str "[" (string/join ", " (map name drivers)) "]"))
 (def driver-description
   (str "Select the driver from: " (print-drivers)))
-
-;(def modes (conj (into #{} (keys commands/command-map)) :test-suite))
-;(defn print-modes []
-;  (str "[" (string/join ", " (map name modes)) "]"))
-;(def mode-description
-;  (str "Select the mode from: " (print-modes)))
 
 (def options
   [["-h" "--help"]
@@ -70,14 +58,14 @@
     (apply println msg args)
     status))
 
-(defn version [] (str "manetu-performance-app version: v" (System/getProperty "performance-app.version")))
+(defn version [] (str "manetu-benchmark-tool version: v" (System/getProperty "performance-app.version")))
 
 (defn prep-usage [msg] (->> msg flatten (string/join \newline)))
 
 (defn usage [options-summary]
   (prep-usage [(version)
                ""
-               "Usage: manetu-performance-app [options]"
+               "Usage: manetu-benchmark-tool [options]"
                ""
                "Options:"
                options-summary]))

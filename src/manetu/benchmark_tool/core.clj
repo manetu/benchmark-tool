@@ -1,17 +1,17 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
-(ns manetu.performance-app.core
+(ns manetu.benchmark-tool.core
   (:require [medley.core :as m]
             [promesa.core :as p]
             [taoensso.timbre :as log]
             [clojure.core.async :refer [>!! <! go go-loop] :as async]
             [progrock.core :as pr]
             [kixi.stats.core :as kixi]
-            [manetu.performance-app.commands :as commands]
-            [manetu.performance-app.time :as t]
-            [manetu.performance-app.synthetic :as synthetic]
-            [manetu.performance-app.driver.core :as driver.core]
-            [manetu.performance-app.stats :as stats]
-            [manetu.performance-app.reports :as reports]))
+            [manetu.benchmark-tool.commands :as commands]
+            [manetu.benchmark-tool.time :as t]
+            [manetu.benchmark-tool.synthetic :as synthetic]
+            [manetu.benchmark-tool.driver.core :as driver.core]
+            [manetu.benchmark-tool.stats :as stats]
+            [manetu.benchmark-tool.reports :as reports]))
 
 (defn promise-put!
   [port val]
@@ -90,13 +90,14 @@
     (/ (Math/round (* d factor)) factor)))
 
 (defn compute-summary-stats
-  [options n mux]
-  (-> (transduce-promise options n mux (map :duration) stats/summary)
+  [options n mux {:keys [description pred]}]
+  (-> (transduce-promise options n mux (comp (filter pred) (map :duration)) stats/summary)
       (p/then (fn [{:keys [dist] :as summary}]
                 (-> summary
                     (dissoc :dist)
                     (merge dist)
-                    (as-> $ (m/map-vals #(round2 3 (or % 0)) $)))))))
+                    (as-> $ (m/map-vals #(round2 3 (or % 0)) $))
+                    (assoc :description description))))))
 
 (defn successful?
   [{:keys [success]}]
@@ -106,17 +107,43 @@
   [{:keys [success]}]
   (false? success))
 
+(defn categorize-error [{:keys [exception]}]
+  (when exception
+    (let [data (ex-data exception)
+          msg (ex-message exception)]
+      (cond
+        (re-find #"unauthorized|401|bad status response" msg) "Unauthorized"
+        (re-find #"timeout|504" msg) "Timeout"
+        (re-find #"not found|404" msg) "Not Found"
+        :else "Other Error"))))
+
+(def stat-preds
+  [{:description "Errors" :pred failed?}
+   {:description "Unauthorized Errors" :pred (fn [r] (and (failed? r) (= "Unauthorized" (categorize-error r))))}
+   {:description "Timeout Errors" :pred (fn [r] (and (failed? r) (= "Timeout" (categorize-error r))))}
+   {:description "Not Found Errors" :pred (fn [r] (and (failed? r) (= "Not Found" (categorize-error r))))}
+   {:description "Successes" :pred successful?}
+   {:description "Total" :pred identity}])
 (defn count-msgs
   [options n mux pred]
   (transduce-promise options n mux (filter pred) kixi/count))
 
 (defn compute-stats
   [options n mux]
-  (-> (p/all [(compute-summary-stats options n mux)
-              (count-msgs options n mux successful?)
-              (count-msgs options n mux failed?)])
-      (p/then (fn [[summary s f]] (assoc summary :successes s :failures f)))))
-
+  (-> (p/all (map (partial compute-summary-stats options n mux) stat-preds))
+      (p/then (fn [summaries]
+                (let [failures (or (:count (first (filter #(= (:description %) "Errors") summaries))) 0)
+                      successes (or (:count (first (filter #(= (:description %) "Successes") summaries))) 0)
+                      unauthorized (or (:count (first (filter #(= (:description %) "Unauthorized Errors")
+                                                              summaries))) 0)
+                      timeout (or (:count (first (filter #(= (:description %) "Timeout Errors") summaries))) 0)
+                      not-found (or (:count (first (filter #(= (:description %) "Not Found Errors") summaries))) 0)]
+                  (-> (first (filter #(= (:description %) "Total") summaries))
+                      (merge {:failures failures
+                              :successes successes
+                              :unauthorized unauthorized
+                              :timeout timeout
+                              :not_found not-found})))))))
 (defn render [options stats]
   (reports/render-stats options stats))
 
@@ -168,15 +195,18 @@
   "Performs cleanup operation for a specific test suite"
   [{:keys [count prefix] :as test-config} driver-options]
   (log/info "Starting cleanup operation for prefix:" prefix "with count:" count)
-  (let [cleanup-records (synthetic/load-synthetic-records count prefix)
-        cleanup-opts (assoc driver-options :mode :delete-vaults)
-        cleanup-stats (exec-phase cleanup-opts cleanup-records)]
+  (let [configs (generate-parameter-combinations test-config)
+        results (for [{:keys [count prefix]} configs]
+                  (let [cleanup-records (synthetic/load-synthetic-records count prefix)
+                        cleanup-opts (assoc driver-options :mode :delete-vaults)
+                        cleanup-stats (exec-phase cleanup-opts cleanup-records)]
+                    (if (pos? (:failures cleanup-stats))
+                      (log/warn "Some cleanup operations failed. Check logs for details.")
+                      (log/info "Cleanup completed successfully"))
 
-    (if (pos? (:failures cleanup-stats))
-      (log/warn "Some cleanup operations failed. Check logs for details.")
-      (log/info "Cleanup completed successfully"))
-
-    {"cleanup" cleanup-stats}))
+                    {:config {:count count :prefix prefix}
+                     :results {"cleanup" cleanup-stats}}))]
+    {"cleanup" results}))
 
 (defn exec-vault-suite
   [{:keys [clean_up] :as test-config} driver-options]

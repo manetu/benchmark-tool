@@ -1,6 +1,6 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
 
-(ns manetu.performance-app.sparql
+(ns manetu.benchmark-tool.sparql
   (:require [clostache.parser :as clostache]))
 
 (def update-template

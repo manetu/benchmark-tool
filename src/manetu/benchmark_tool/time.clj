@@ -1,6 +1,6 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
 
-(ns manetu.performance-app.time)
+(ns manetu.benchmark-tool.time)
 
 (defn now [] (System/nanoTime))
 

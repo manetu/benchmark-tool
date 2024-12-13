@@ -1,7 +1,7 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
 
-(ns manetu.performance-app.commands
-  (:require [manetu.performance-app.driver.api :as driver.api]
+(ns manetu.benchmark-tool.commands
+  (:require [manetu.benchmark-tool.driver.api :as driver.api]
             [crypto.random]
             [promesa.core :as p]))
 

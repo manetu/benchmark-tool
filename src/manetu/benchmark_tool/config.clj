@@ -1,5 +1,5 @@
 ;; Copyright © Manetu, Inc.  All rights reserved
-(ns manetu.performance-app.config
+(ns manetu.benchmark-tool.config
   (:require [yaml.core :as yaml]
             [clojure.string :as str]
             [clojure.java.io :as io]))
