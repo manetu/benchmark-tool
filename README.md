@@ -62,7 +62,7 @@ The tool supports automated benchmarking using a YAML configuration file.
 ./target/bin/manetu-benchmark-tool -u https://manetu.instance --token $MANETU_TOKEN --config test-config.yaml
 ```
 
-#### Configuration File Format (test-config.yaml)
+### Configuration File Format (test-config.yaml)
 ```yaml
 tests:
   vaults:
@@ -142,13 +142,59 @@ log_level: debug  # Available levels: trace, debug, info, error
 
 ```
 
-* Each test has a knob: `clean_up: false`
-  * This knob should almost always be set to false and should only be set to true if a previous test run ended prematurely and wasn't able to clean up the data.
-  * If enabled, no real test will be run. This will attempt to delete any existing vaults from previous tests runs using the same prefix/count.
-  * prefix/count must match the prefix/count used for the prematurely ended test run.
+Each test suite can be individually configured with the following parameters:
+
+* `enabled`: Boolean flag to enable/disable the test suite
+* `count`: Number of operations to perform
+    * Can be a single value or an array of values
+    * When multiple values are provided, the test will run once for each value
+* `prefix`: String prefix used to identify/create synthethic test data
+* `clean_up`: Boolean flag for cleanup mode
+    * Should almost always be set to false
+    * Set to true only if a previous test run ended prematurely and wasn't able to clean up the data
+    * When enabled, no real test will be run - it will only attempt to delete existing vaults from previous test runs
+    * prefix/count must match the values used in the prematurely ended test run
+
+Some test suites have additional configuration options:
+
+##### Attributes & Tokenizer Tests
+* `vault_count`: Number of vaults to create for operations
+    * count number of operations will be executed across vault_count number of vaults
+      * Example: If running attributes test with count=1000 and vault_count=100, it will do 1000 operations across those 100 vaults
+    * Must be greater than or equal to concurrency value for accurate performance measurements
+      * Example: To run 64 concurrent operations, vault_count must be at least 64
+
+##### Tokenizer & Tokenizer Translate E2E Tests
+* `realm`: The realm name for the test environment
+    * Must match the realm where you are running your tests
+* `value_min`: Minimum value size for tokenization
+* `value_max`: Maximum value size for tokenization
+* `tokens_per_job`: Number of tokens to generate per operation
+    * Can be a single value or an array of values
+    * Test will run once for each value when multiple values are provided
+* `token_type`: Type of token to generate
+    * Can be "EPHEMERAL" or "PERSISTENT"
+    * Can be a single value or an array containing both types
+    * Test will run once for each type when both are provided
 
 
-#### Results Output
+#### Global Configuration Parameters
+
+* `concurrency`: Array of concurrency levels to test
+    * Test will run once for each concurrency value
+    * Count values (especially vault_count) should be greater than concurrency values
+    * Example: `[16, 32, 64]`
+
+* `log_level`: Logging verbosity level
+    * Available levels: trace, debug, info, error
+
+* `reports`: Optional custom paths for test reports
+    * Default: `./reports/manetu-perf-results-<hh-mm-MM-dd-yyyy>.[csv|json]`
+    * `csv`: Custom path for CSV report output
+    * `json`: Custom path for JSON report output
+
+
+### Results Output
 Results are written to a JSON file and CSV file (default: `./reports/manetu-perf-results-<hh-mm-MM-dd-yyyy>.[csv|json]`) containing:
 - Timestamp of the test run
 - Results for each concurrency level including:

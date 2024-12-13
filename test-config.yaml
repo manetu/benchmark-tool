@@ -1,35 +1,31 @@
-tests:
-  vaults:
-    # Tests vault creation and deletion operations
+tests: # SEE README.MD for detailed information on each configuration paramter
+  vaults: # Tests vault creation and deletion operations, see README.MD for details on config paramaters
     enabled: true
     count:
-      - 50  # Supports supplying multiple values for count
-      - 100 # Test will run multiple times for each value of count supplied
+      - 50
+      - 100
     prefix: vault-test
-    clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
-  e2e:
-    # Tests full lifecycle (create vault -> load attributes -> delete attributes -> delete vault)
+    clean_up: false # SEE README.MD
+  e2e: # Tests full lifecycle (create vault -> load attributes -> delete attributes -> delete vault), see README.MD for details on config paramaters
     enabled: true
     count:
-      - 50  # Supports supplying multiple values for count
-      - 100 # Test will run multiple times for each value of count supplied
+      - 50
+      - 100
     prefix: e2e-test
-    clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
-  attributes:
-    # Tests standalone attribute operations
+    clean_up: false
+  attributes: # Tests standalone attribute operations, see README.MD for details on config paramaters
     enabled: true
     count:
-      - 50  # Supports supplying multiple values for count
-      - 100 # Test will run multiple times for each value of count supplied
-    vault_count: 10  # Number of vaults to create for attribute operations
+      - 50
+      - 100
+    vault_count: 10
     prefix: attr-test
-    clean_up: false # ONLY set to true if previous test run ended prematurely and wasn't able to clean up data. See README.MD for more details.
-  tokenizer:
-    # Tests tokenize only
+    clean_up: false
+  tokenizer: # Tests tokenize only, see README.MD for details on config paramaters
     enabled: true
     count:
-      - 50   # Supports supplying multiple values for count
-      - 100 # Test will run multiple times for each value of count supplied
+      - 50
+      - 100
     vault_count: 10
     prefix: tokenizer-test
     realm: data-loader # IMPORTANT: This needs to match the realm you are running your tests
@@ -37,17 +33,16 @@ tests:
     value_min: 4
     value_max: 32
     tokens_per_job:
-      - 1 # Supports supplying multiple values for tokens_per_job
-      - 2 # Test will run multiple times for each value of tokens_per_job supplied
-    token_type:
-      - EPHEMERAL  # Supports supplying both, this will run the test twice, once for each token type
-      - PERSISTENT # Can be EPHEMERAL or PERSISTENT
-  tokenizer_translate_e2e:
-    # Tests tokenize + translate e2e time
+      - 1
+      - 2
+    token_type:  # Can be EPHEMERAL or PERSISTENT
+      - EPHEMERAL
+      - PERSISTENT
+  tokenizer_translate_e2e: # Tests tokenize + translate e2e time, see README.MD for details on config paramaters
     enabled: true
     count:
-      - 50   # Supports supplying multiple values for count
-      - 100 # Test will run multiple times for each value of count supplied
+      - 50
+      - 100
     vault_count: 10
     prefix: tokenizer-e2e-test
     realm: data-loader # IMPORTANT: This needs to match the realm you are running your tests
@@ -55,16 +50,12 @@ tests:
     value_min: 4
     value_max: 32
     tokens_per_job:
-      - 1  # Supports supplying multiple values for tokens_per_job
-      - 2  # Test will run multiple times for each value of tokens_per_job supplied
-    token_type:
-      - EPHEMERAL  # Supports supplying both, this will run the test twice, once for each token type
-      - PERSISTENT # Can be EPHEMERAL or PERSISTENT
-concurrency:
-  # note: count values for all sections (especially vault_count for attributes)
-  # should be greater than concurrency values for accurate performance measurements
-  # e.g: To fire 64 concurrent attribute operation requests, there needs to be 64
-  # or more vaults (vault_count>64)
+      - 1
+      - 2
+    token_type:  # Can be EPHEMERAL or PERSISTENT
+      - EPHEMERAL
+      - PERSISTENT
+concurrency: # SEE README.MD
   - 16
   - 32
   - 64
