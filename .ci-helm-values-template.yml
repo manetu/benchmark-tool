@@ -3,4 +3,7 @@ global:
     imagePullSecrets:
       - name: gitlab-regcred # the cred derived from gitlab ci
     platformoperator:
-      existingSecret: platform-operator-secrets
+      existingSecret: platform-operator-secret
+mcp-iam-service:
+  platformoperator:
+    existingSecret: platform-operator-secret

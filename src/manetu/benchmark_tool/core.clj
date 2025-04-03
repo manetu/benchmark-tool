@@ -3,7 +3,7 @@
   (:require [medley.core :as m]
             [promesa.core :as p]
             [taoensso.timbre :as log]
-            [clojure.core.async :refer [>!! <! go go-loop] :as async]
+            [clojure.core.async :refer [>!! <! <!! go go-loop] :as async]
             [progrock.core :as pr]
             [kixi.stats.core :as kixi]
             [manetu.benchmark-tool.commands :as commands]
@@ -20,7 +20,7 @@
      (async/put! port val resolve))))
 
 (defn execute-command
-  [{:keys [verbose-errors]} f {{:keys [Email]} :data :as record} ch]
+  [{:keys [verbose-errors]} f {{:keys [Email]} :data :as record}]
   (log/trace "record:" record)
   (let [start (t/now)]
     (-> (f record)
@@ -39,24 +39,24 @@
            (let [end (t/now)
                  d (t/duration end start)]
              (log/trace Email "processed in" d "msecs")
-             (promise-put! ch (assoc result
-                                     :email Email
-                                     :duration d)))))
-        (p/then
-         (fn [_]
-           (async/close! ch))))))
+             (assoc result
+                    :email Email
+                    :duration d)))))))
 
 (defn execute-commands
   [{:keys [concurrency] :as options} f output-ch input-ch]
-  (p/create
-   (fn [resolve reject]
-     (go
-       (log/trace "launching" concurrency "requests")
-       (<! (async/pipeline-async concurrency
-                                 output-ch
-                                 (partial execute-command options f)
-                                 input-ch))
-       (resolve true)))))
+  (-> (p/all
+       (map
+        (fn [_]
+          (p/vthread
+           (loop []
+             (when-let [m (<!! input-ch)]
+               (>!! output-ch @(execute-command options f m))
+               (recur)))))
+        (range concurrency)))
+      (p/then (fn [_]
+                (async/close! output-ch)
+                true))))
 
 (defn show-progress
   [{:keys [progress concurrency] :as options} n mux]
