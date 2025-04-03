@@ -1,12 +1,66 @@
 include:
-  - project: manetu/tools/ci-tools
-    ref: v3.0.0
+  - project: manetu/users/ipaz/ci-tools
+    ref: deploy_testenv_script
     file: /templates/docker.yml
+
+variables:
+  CI_TOOLS_IMAGE: $CI_REGISTRY/manetu/users/ipaz/ci-tools/deploy-testenv-script:b13.29f4a4
 
 .citools_variables:
   variables:
     MANETU_RELEASE_STREAM: "2.2.0"
     KANIKO_EXECUTOR_ARGS: --build-arg GITLAB_TOKEN_VALUE=$CI_JOB_TOKEN
+
+integrate:
+  extends: .dynamic_kubernetes_env
+  variables:
+    HELM_CHART_REF: registry.gitlab.com/manetu/manetu-charts/manetu-platform:$MANETU_RELEASE_STREAM
+  script:
+    - |
+      # Prepare and deploy platform
+      set -eux
+      
+      # Create the environment configmap with correct URLs based on TLS settings
+      if [ "${MANETU_TLS_ENABLED:-false}" = "true" ]; then
+        SCHEME="https"
+      else
+        SCHEME="http"
+      fi
+      
+      # Create benchmark environment configmap
+      cat <<EOF | kubectl apply -f -
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: benchmark-env
+        namespace: manetu-platform
+      data:
+        MANETU_URL: $SCHEME://ingress.manetu-platform
+        MANETU_AUDIENCE: $SCHEME://ingress.manetu-platform.svc.cluster.local/oauth/token
+        GATEWAY_URL: $SCHEME://ingress.manetu-platform.svc.cluster.local
+      EOF
+      
+      # Apply operator credentials and benchmark configuration
+      kubectl apply -f platform-operator-secrets.yml
+      kubectl apply -f ci-config.yml
+      
+      echo "Deploying Manetu Platform"
+      deploy-testenv
+      
+      # Apply benchmark job
+      kubectl apply -f benchmark-job.yml
+      
+      # Wait for benchmark to complete
+      echo "Waiting for benchmark job to complete..."
+      kubectl wait --for=condition=complete job/bench-tool --timeout=2m
+      
+      # Extract and display results
+      echo "Benchmark results:"
+      kubectl logs job/bench-tool -c benchmark-runner > benchmark-results.log
+      cat benchmark-results.log
+  artifacts:
+    paths:
+      - benchmark-results.log
 
 # Approve
 approve_release:

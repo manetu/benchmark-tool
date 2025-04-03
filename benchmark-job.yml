@@ -1,0 +1,296 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bench-tool
+  namespace: manetu-platform
+  labels:
+    app.kubernetes.io/name: benchmark-tool
+    app.kubernetes.io/instance: benchmark
+    "manetu.com/hook": "true"
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: benchmark-tool
+        "manetu.com/hook": "true"
+        "sidecar.istio.io/inject": "false"
+    spec:
+      imagePullSecrets:
+        - name: manetu-regcred
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      restartPolicy: Never
+      volumes:
+        - name: platform-operator-credentials
+          secret:
+            secretName: platform-operator-credentials
+        - name: x509-certs
+          emptyDir: {}
+        - name: shared-data
+          emptyDir: {}
+        - name: benchmark-config
+          configMap:
+            name: benchmark-config
+      initContainers:
+        - name: wait-for-deps
+          image: registry.gitlab.com/manetu/platform/utility/mu-init:v2.2.0
+          imagePullPolicy: Always
+          command:
+            - bash
+            - -c
+            - |
+              set -x
+              
+              declare -a deps=("mcp-identity-provider" "mcp-iam-service-gw" "mcp-iam-service-query" "mcp-realm-service")
+              
+              for i in "${deps[@]}"
+              do
+                 echo "Waiting for dependency $i"
+                 wait-for -t 600 $i:50051
+              done
+        - name: generate-x509
+          image: registry.gitlab.com/manetu/platform/utility/mu-init:v2.2.0
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: x509-certs
+              mountPath: /etc/mcp/userx509
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              
+              REALM_NAME="bench-tool"
+              
+              echo "Generating X.509 certificate with realm $REALM_NAME..."
+              
+              # Generate a private key
+              openssl ecparam -name prime256v1 -genkey -noout -out /etc/mcp/userx509/key.pem
+              
+              # Create a self-signed certificate
+              openssl req -new -x509 -key /etc/mcp/userx509/key.pem -out /etc/mcp/userx509/cert.pem -days 365 -subj "/O=$REALM_NAME"
+              
+              echo "Generated certificate:"
+              openssl x509 -in /etc/mcp/userx509/cert.pem -text -noout
+              
+              echo "X.509 credentials generated and stored in shared volume"
+        - name: create-realm
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: registry.gitlab.com/manetu/tools/security-token:v0.0.3
+          imagePullPolicy: Always
+          env:
+            - name: MANETU_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: benchmark-env
+                  key: MANETU_URL
+            - name: MANETU_AUDIENCE
+              valueFrom:
+                configMapKeyRef:
+                  name: benchmark-env
+                  key: MANETU_AUDIENCE
+          volumeMounts:
+            - name: platform-operator-credentials
+              readOnly: true
+              mountPath: "/etc/mcp/platformoperator"
+            - name: x509-certs
+              readOnly: true
+              mountPath: "/etc/mcp/userx509"
+            - name: shared-data
+              mountPath: "/shared-data"
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              REALM_ID="bench-tool"
+              
+              invoke_graphql () {
+                local QUERY="$1"
+                local DATA=$(jq -cn --arg QUERY "$QUERY" '{ query: $QUERY, variables: null }')
+                echo "$DATA" | curl --insecure --data-binary @- --silent --show-error --fail \
+                  --header 'Content-Type: application/json' \
+                  --header "Authorization: Bearer $(cat /tmp/token)" \
+                  "$MANETU_URL/graphql" \
+                  | jq 'if .errors then "\(.errors[].message)\n" | halt_error(1) else . end'
+              }
+              
+              invoke_graphql_check () {
+                cat - | curl --insecure --data-binary @- --silent --show-error --fail \
+                             --header 'Content-Type: application/json' \
+                             --header "Authorization: Bearer $(cat /tmp/token)" \
+                             $MANETU_URL/graphql \
+                      | jq 'if .errors then "\(.errors[].message)\n" | halt_error(1) else . end'
+              }
+              
+              check_exists () {
+                local realm_id="$1"
+                echo "Checking if realm '$realm_id' exists..." >&2
+              
+                local response=$(echo '{"query": "{ list_realms(pagination: {limit: 100}) { id } }" }' | invoke_graphql_check)
+              
+                echo "GraphQL response: $response" >&2
+              
+                if echo "$response" | jq -e --arg realm "$realm_id" '.data.list_realms[].id | select(. == $realm)' > /dev/null 2>&1; then
+                  echo "true"
+                else
+                  echo "false"
+                fi
+              }
+              
+              echo "Generating token with platform operator credentials"
+              manetu-security-token login --insecure pem --key /etc/mcp/platformoperator/key.pem --cert /etc/mcp/platformoperator/cert.pem --path > /tmp/token
+              echo "Token generated successfully"
+              
+              echo "Login complete, checking realm status.."
+              result=$(check_exists "$REALM_ID" | tail -n 1)
+              echo "Returned from check_exists: $result"
+              
+              # Format certificate as escaped string with \n line breaks
+              CERT_ESCAPED=$(cat /etc/mcp/userx509/cert.pem | awk 'NR > 1 {printf "\\n"} {printf "%s", $0}' | sed 's/\\n$//')
+              
+              # Define the query outside the if statement to avoid heredoc indentation issues
+              QUERY=$(cat <<EOF
+              mutation {
+                create_realm(id: "$REALM_ID", iam_admin_credential: {x509: "$CERT_ESCAPED"}, data: { name: "$REALM_ID" })
+              }
+              EOF
+              )
+              
+              if [ "$result" != "true" ]; then
+                echo "Realm does not exist, creating with X.509 certificate..."
+                echo "Certificate escaped successfully"
+              
+                echo "Creating realm with query:"
+                echo "$QUERY"
+                invoke_graphql "$QUERY"
+                echo "Realm created successfully"
+              
+                # Write status file indicating we created the realm with our X.509 cert
+                echo "CREATED" > /shared-data/realm-status
+                echo "Status file written: CREATED"
+              else
+                echo "Realm already exists, nothing to do"
+              
+                # Write status file indicating the realm existed already
+                echo "EXISTED" > /shared-data/realm-status
+                echo "Status file written: EXISTED"
+              fi
+        - name: generate-pat
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: registry.gitlab.com/manetu/tools/security-token:v0.0.3
+          imagePullPolicy: Always
+          env:
+            - name: MANETU_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: benchmark-env
+                  key: MANETU_URL
+            - name: MANETU_AUDIENCE
+              valueFrom:
+                configMapKeyRef:
+                  name: benchmark-env
+                  key: MANETU_AUDIENCE
+          volumeMounts:
+            - name: x509-certs
+              readOnly: true
+              mountPath: "/etc/mcp/userx509"
+            - name: shared-data
+              mountPath: "/shared-data"
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              
+              # Check if we should proceed
+              if [ -f "/shared-data/realm-status" ]; then
+                REALM_STATUS=$(cat /shared-data/realm-status)
+                echo "Realm status from init container: $REALM_STATUS"
+              
+                if [ "$REALM_STATUS" = "EXISTED" ]; then
+                  echo "Realm already existed and was not created by this job."
+                  echo "WARNING: The X.509 credentials may not be valid for this realm."
+                  echo "Continuing anyway, but this may fail."
+                fi
+              else
+                echo "WARNING: No realm status file found. Proceeding with caution."
+              fi
+              
+              # Generate token using X.509 credentials
+              echo "Generating token using X.509 credentials"
+              manetu-security-token login --insecure pem --key /etc/mcp/userx509/key.pem --cert /etc/mcp/userx509/cert.pem --path > /tmp/token
+              
+              # Create a file with GraphQL mutation
+              echo '{"query": "mutation { create_pat(name: \"benchmark-tool-pat\") }"}' > /tmp/query.json
+              
+              # Execute the GraphQL request
+              echo "Creating PAT"
+              RESPONSE=$(curl --insecure --data-binary @/tmp/query.json --silent --fail \
+                        --header 'Content-Type: application/json' \
+                        --header "Authorization: Bearer $(cat /tmp/token)" \
+                        $MANETU_URL/graphql)
+              
+              echo "GraphQL response: $RESPONSE"
+              
+              # Extract PAT from response
+              PAT=$(echo "$RESPONSE" | jq -r '.data.create_pat')
+              
+              if [ "$PAT" != "null" ] && [ -n "$PAT" ]; then
+                echo "PAT successfully created: $PAT"
+                echo "$PAT" > /shared-data/pat-token
+              else
+                echo "Failed to create PAT - this is likely because the X.509 credentials do not match with an existing realm"
+                echo "ERROR_CREATING_PAT" > /shared-data/pat-token
+                exit 1
+              fi
+      containers:
+        - name: benchmark-runner
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+          image: registry.gitlab.com/manetu/tools/benchmark-tool:v1.0.0-2.8
+          volumeMounts:
+            - name: shared-data
+              readOnly: true
+              mountPath: "/shared-data"
+            - name: benchmark-config
+              readOnly: true
+              mountPath: "/etc/benchmark"
+          env:
+            - name: JVM_OPTS
+              value: "-server"
+            - name: GATEWAY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: benchmark-env
+                  key: GATEWAY_URL
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              
+              # Check if PAT was created successfully
+              if [ ! -f "/shared-data/pat-token" ]; then
+                echo "ERROR: PAT token file not found"
+                exit 1
+              fi
+              
+              PAT=$(cat /shared-data/pat-token)
+              
+              if [ "$PAT" = "ERROR_CREATING_PAT" ]; then
+                echo "ERROR: PAT creation failed in previous step"
+                exit 1
+              fi
+              
+              echo "Running benchmark tool with PAT: $PAT"
+              java -jar /usr/local/app.jar -u $GATEWAY_URL \
+                --token "$PAT" \
+                --config /etc/benchmark/config.yaml

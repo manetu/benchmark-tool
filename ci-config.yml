@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: benchmark-config
+  namespace: manetu-platform
+data:
+  config.yaml: |
+    tests:
+      vaults:
+        enabled: true
+        count:
+          - 10
+        prefix: vault-test
+        clean_up: false
+      e2e: 
+        enabled: true
+        count:
+          - 10
+        prefix: e2e-test
+        clean_up: false
+      attributes:
+        enabled: true
+        count:
+          - 10
+        vault_count: 10
+        prefix: attr-test
+        clean_up: false
+      tokenizer:
+        enabled: true
+        count:
+          - 10
+        vault_count: 10
+        prefix: tokenizer-test
+        realm: bench-tool
+        clean_up: false
+        value_min: 4
+        value_max: 32
+        tokens_per_job:
+          - 1
+        token_type:
+          - EPHEMERAL
+      tokenizer_translate_e2e:
+        enabled: true
+        count:
+          - 10
+        vault_count: 10
+        prefix: tokenizer-e2e-test
+        realm: bench-tool
+        clean_up: false
+        value_min: 4
+        value_max: 32
+        tokens_per_job:
+          - 1
+        token_type:
+          - EPHEMERAL
+    concurrency:
+      - 8
+    log_level: trace

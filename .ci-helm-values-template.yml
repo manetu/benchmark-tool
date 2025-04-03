@@ -1,0 +1,6 @@
+global:
+  manetu:
+    imagePullSecrets:
+      - name: gitlab-regcred # the cred derived from gitlab ci
+    platformoperator:
+      existingSecret: platform-operator-secrets
