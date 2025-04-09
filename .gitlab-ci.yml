@@ -7,7 +7,6 @@ include:
   variables:
     MANETU_RELEASE_STREAM: "2.2.0"
     KANIKO_EXECUTOR_ARGS: --build-arg GITLAB_TOKEN_VALUE=$CI_JOB_TOKEN
-    HELM_CHART_REF: registry.gitlab.com/manetu/manetu-charts/manetu-platform:$MANETU_RELEASE_STREAM
 
 integrate:
   extends: .dynamic_kubernetes_env
@@ -35,7 +34,7 @@ integrate:
       kubectl apply -f ci-platform-operator-secrets.yml
       kubectl apply -f ci-benchmark-config.yml
       
-      echo "Deploying Manetu Platform"
+      echo "Calling deploy-testenv"
       deploy-testenv
       
       # Apply benchmark job
