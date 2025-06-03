@@ -25,12 +25,13 @@
          :timeout (or (:timeout stats) 0)
          :not_found (or (:not_found stats) 0)}))
 
-(defn format-csv-row [concurrency suite-name config section stats]
+(defn format-csv-row [timestamp concurrency suite-name config section stats]
   (let [token-type (when (#{:tokenizer :tokenizer_translate_e2e} (:test-name config))
                      (:token_type config))
         tokens-per-job (when (#{:tokenizer :tokenizer_translate_e2e} (:test-name config))
                          (:tokens_per_job config))]
-    [(str concurrency)
+    [timestamp
+     (str concurrency)
      suite-name
      section
      (:successes stats)
@@ -53,7 +54,7 @@
      (or (:not_found stats) 0)]))
 
 (defn results->csv-data [{:keys [timestamp results]}]
-  (let [headers ["Concurrency" "Test Suite" "Section" "Successes" "Failures" "Min (ms)" "Mean (ms)" "Stddev"
+  (let [headers ["Timestamp" "Concurrency" "Test Suite" "Section" "Successes" "Failures" "Min (ms)" "Mean (ms)" "Stddev"
                  "P50 (ms)" "P90 (ms)" "P95 (ms)" "P99 (ms)" "Max (ms)" "Total Duration (ms)"
                  "Rate (ops/sec)" "Count" "Token Type" "Tokens Per Job"
                  "Unauthorized" "Timeout" "Not Found"]
@@ -62,6 +63,7 @@
                    test-result suite-results
                    [section stats] (:results test-result)]
                (format-csv-row
+                timestamp
                 (:concurrency result)
                 (name suite-name)
                 (:config test-result)
